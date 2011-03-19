@@ -1,0 +1,22 @@
+name: FortressAssault
+main: ssell.FortressAssault.FortressAssault
+version: "0.1.8"
+commands:
+    faStart:
+        description: Starts the event.
+        usage: /<command> 
+    faStop:
+        description: Stops the event
+        usage: /<command> 
+    faAdd:
+        description: Adds player to team. RED or BLUE
+        usage: /<command> 
+    faRemove:
+        description: Removes player from team.
+        usage: /<command> 
+    faResource:
+        description: Sets amount of resources provided. 1, 2, or 3.
+        usage: /<command> 
+    faTime:
+        description: Sets time limit before the Assault.
+        usage: /<command>
