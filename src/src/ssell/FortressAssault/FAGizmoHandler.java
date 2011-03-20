@@ -20,7 +20,7 @@ public class FAGizmoHandler
 	{
 		public String team;
 		public Block block;
-		public Player destroyer;
+		public String destroyer;
 		public boolean destructing;
 		
 		public FAGizmo( String p_Team, Block p_Block )
@@ -88,6 +88,16 @@ public class FAGizmoHandler
 		}
 	}
 	
+	public String getPlacedGizmoTeam( )
+	{
+		if( gizmoList.size( ) != 0 )
+		{
+			return gizmoList.get( 0 ).team;
+		}
+		
+		return "null";
+	}
+	
 	public boolean isGizmo( Block block )
 	{
 		for( int i = 0; i < gizmoList.size( ); i++ )
@@ -143,7 +153,7 @@ public class FAGizmoHandler
 			//Opposing team
 			if( !gizmo.destructing )
 			{
-				gizmo.destroyer = player;
+				gizmo.destroyer = player.getDisplayName( );
 				gizmo.destructing = true;
 				
 				if( plugin.getTeam( player ).equals( "BLUE" ) )
@@ -177,6 +187,14 @@ public class FAGizmoHandler
 		//Check if the gizmo has not been saved
 		if( gizmo.destructing )
 		{
+			for( int i = 0; i < gizmoList.size( ); i++ )
+			{
+				if( gizmoList.get( i ) != gizmo )
+				{
+					gizmoList.get( i ).destructing = false;
+				}
+			}
+			
 			if( gizmo.team.equals( "BLUE" ) )
 			{
 				plugin.getServer( ).broadcastMessage( ChatColor.RED + "Red Team " + 
@@ -189,9 +207,9 @@ public class FAGizmoHandler
 			}
 			
 			//Game is over.
-			clearList( );
-			
 			plugin.gameOver( );
+			
+			clearList( );	
 		}
 	}
 	
@@ -203,5 +221,18 @@ public class FAGizmoHandler
 		}
 		
 		gizmoList.clear( );
+	}
+	
+	public String getDestroyer( )
+	{
+		for( int i = 0; i < gizmoList.size( ); i++ )
+		{
+			if( gizmoList.get( i ).destructing )
+			{
+				return gizmoList.get( i ).destroyer;
+			}
+		}
+		
+		return null;
 	}
 }

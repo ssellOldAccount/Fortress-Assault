@@ -22,8 +22,6 @@ import org.bukkit.plugin.PluginLoader;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.PluginManager;
 
-import ssell.FortressAssault.FAPvPWatcher;
-
 //------------------------------------------------------------------------------------------
 
 /**
@@ -40,15 +38,23 @@ public class FortressAssault
 	
 	private static final Logger log = Logger.getLogger( "Minecraft" );
 	
-	private final FABlockListener blockListener = new FABlockListener( this );
-	private final FAEntityListener entityListener = new FAEntityListener( this );
+	//The order of these is critical
+	private final FAGizmoHandler gizmoHandler = new FAGizmoHandler( this, 2 );
+	private final FABlockListener blockListener = new FABlockListener( this, gizmoHandler );
 	private final FAPvPWatcher pvpWatcher = new FAPvPWatcher( this );
+	private final FAEntityListener entityListener = new FAEntityListener( this );
+	private final FAPlayerListener playerListener = new FAPlayerListener( this, entityListener );
 	
 	private int resources = 2;			//Default resource level (normal)
 	private int timeLimit = 1;			//Default time limit to build
 	
 	private final List< Player > blueTeam = new ArrayList< Player >( );
 	private final List< Player > redTeam = new ArrayList< Player >( );
+	private final List< String > blueStrList = new ArrayList< String >( );
+	private final List< String > redStrList = new ArrayList< String >( );
+	
+	private boolean fortify = false;
+	private boolean assault = false;
 	
 	//--------------------------------------------------------------------------------------
 
@@ -76,8 +82,10 @@ public class FortressAssault
 				                 Event.Priority.Normal, this );
 		pluginMgr.registerEvent( Event.Type.ENTITY_DAMAGED, entityListener,
 								 Event.Priority.Normal, this );
+		pluginMgr.registerEvent( Event.Type.PLAYER_RESPAWN, playerListener,
+								 Event.Priority.Normal, this );
 		
-		log.info( "Fortress Assault v0.3.0 is enabled!" );
+		log.info( "Fortress Assault v0.4.0 is enabled!" );
 	}
 	
 	/**
@@ -99,6 +107,8 @@ public class FortressAssault
 			}
 			else if( commandName.equals( "fastop" ) )
 			{
+				stopEvent( ( Player )sender );
+				
 				return true;
 			}
 			else if( commandName.equals( "faadd" ) )
@@ -221,19 +231,24 @@ public class FortressAssault
 		{
 			Player tempPlayer = getServer( ).getPlayer( toAdd );
 			
-			if( tempPlayer != null )
+			if( tempPlayer.getDisplayName( ).equalsIgnoreCase( toAdd ) )
 			{
-				if( team.equalsIgnoreCase( "blue" ) )
+				if( tempPlayer != null )
 				{
-					blueTeam.add( tempPlayer );
-					
-					getServer( ).broadcastMessage( ChatColor.BLUE + toAdd + " added to Blue Team!" );
-				}
-				else
-				{
-					redTeam.add( tempPlayer );
-					
-					getServer( ).broadcastMessage( ChatColor.RED + toAdd + " added to Red Team!" );
+					if( team.equalsIgnoreCase( "blue" ) )
+					{
+						blueTeam.add( tempPlayer );
+						blueStrList.add( toAdd );
+						
+						getServer( ).broadcastMessage( ChatColor.BLUE + toAdd + " added to Blue Team!" );
+					}
+					else
+					{
+						redTeam.add( tempPlayer );
+						redStrList.add( toAdd );
+						
+						getServer( ).broadcastMessage( ChatColor.RED + toAdd + " added to Red Team!" );
+					}
 				}
 			}
 			else
@@ -248,6 +263,43 @@ public class FortressAssault
 	}
 	
 	/**
+	 * Stops the event but does not clear the lists.<br>
+	 * Player that made the command must be part of the current game if one is occuring.
+	 */
+	public void stopEvent( Player sender )
+	{
+		//Either phase is occuring
+		if( ( fortify == true ) || ( assault == true ) )
+		{
+			//If the sender is part of the game
+			if( getTeam( sender ) != "null" )
+			{
+				getServer( ).broadcastMessage( ChatColor.YELLOW + sender.getDisplayName( ) +
+						" has stopped the current game of Fortress Assault." );
+				
+				fortify = false;
+				assault = false;
+				
+				//returnInventories( );
+				
+				pvpWatcher.clear( );
+				
+				entityListener.pvpListen( false );
+				blockListener.setPhase( false, false );
+			}
+			else
+			{
+				sender.sendMessage( ChatColor.DARK_RED + "You are not a member of the current game!" );
+			}
+			
+		}
+		else
+		{
+			sender.sendMessage( ChatColor.DARK_RED + "No Fortress Assault game occuring." );
+		}
+	}
+	
+	/**
 	 * Called when a player submits the '/faStart' command.<br><br>
 	 * First checks to make sure each team has at least one member, and warns if
 	 * the teams are unbalanced.<br><br>
@@ -258,91 +310,103 @@ public class FortressAssault
 	 */
 	public boolean startEvent( Player sender )
 	{
-		//Want to warn about each separate team
-		if( blueTeam.size( ) == 0 )
+		if( ( fortify == true ) || ( assault == true ) )
 		{
-			sender.sendMessage( ChatColor.DARK_RED + "Blue Team needs atleast one member!" );
-		}
-		
-		if( redTeam.size( ) == 0 )
-		{
-			sender.sendMessage( ChatColor.DARK_RED + "Red Team needs atleast one member!" );
-		}
-		
-		//If either of the teams were not ready, go no further.
-		if( ( redTeam.size( ) == 0 ) || ( blueTeam.size( ) == 0 ) )
-		{
+			sender.sendMessage( ChatColor.DARK_RED + "You cannot start a game when one is already occuring!" );
+			
 			return false;
 		}
-		
-		//So the teams each have at least one member.
-		//Send a warning message if the teams are unbalanced but don't do anything about it.
-		
-		if( blueTeam.size( ) != redTeam.size( ) )
+		else
 		{
-			sender.sendMessage( ChatColor.YELLOW + "Warning! Teams unbalanced. /faStop if you want to correct this." );
-		}
+			fortify = true;
+			assault = false;
+			
+			//Want to warn about each separate team
+			if( blueTeam.size( ) == 0 )
+			{
+				sender.sendMessage( ChatColor.DARK_RED + "Blue Team needs atleast one member!" );
+			}
+			
+			if( redTeam.size( ) == 0 )
+			{
+				sender.sendMessage( ChatColor.DARK_RED + "Red Team needs atleast one member!" );
+			}
+			
+			//If either of the teams were not ready, go no further.
+			if( ( redTeam.size( ) == 0 ) || ( blueTeam.size( ) == 0 ) )
+			{
+				return false;
+			}
+			
+			//So the teams each have at least one member.
+			//Send a warning message if the teams are unbalanced but don't do anything about it.
+			
+			if( blueTeam.size( ) != redTeam.size( ) )
+			{
+				sender.sendMessage( ChatColor.YELLOW + "Warning! Teams unbalanced. /faStop if you want to correct this" );
+			}
+			
+			//Replace the inventories and turn God mode on
+			replaceInventoriesFortify( );
+			setGodMode( true );
+			
+			blockListener.setPhase( true, false );
+			
+			//----------------------------------------------------------------------------------
+			// Set up the counters
 		
-		//Replace the inventories and turn God mode on
-		replaceInventoriesFortify( );
-		setGodMode( true );
-		
-		blockListener.setPhase( true, false );
-		
-		//----------------------------------------------------------------------------------
-		// Set up the counters
-		
-		getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this , new Runnable( ) 
-		{
-		    public void run( ) 
-		    {
-		        beginAssault( );
-		    }
-		}, ( long )( timeLimit * 60 * 20 ) ); //timeLimit to seconds, then 20 ticks per sec.
-
-		if( timeLimit > 5 )
-		{
-			//5 minute warning
-			getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this, new Runnable( )
+			getServer( ).getScheduler( ).scheduleSyncDelayedTask( this , new Runnable( ) 
+			{
+			    public void run( ) 
+			    {
+			        beginAssault( );
+			    }
+			}, ( long )( timeLimit * 60 * 20 ) ); //timeLimit to seconds, then 20 ticks per sec.
+	
+			if( timeLimit > 5 )
+			{
+				//5 minute warning
+				getServer( ).getScheduler( ).scheduleSyncDelayedTask( this, new Runnable( )
+				{
+					public void run( )
+					{
+						timeWarningMinutes( 5 );
+					}
+				}, ( long )( ( timeLimit - 5 ) * 60 * 20 ) );
+			}
+			
+			if( timeLimit > 1 )
+			{
+				//1 minute warning
+				getServer( ).getScheduler( ).scheduleSyncDelayedTask( this, new Runnable( )
+				{
+					public void run( )
+					{
+						timeWarningMinutes( 1 );
+					}
+				}, ( long )( ( timeLimit - 1 ) * 60 * 20 ) );
+			}
+			
+			//30 seconds warning
+			getServer( ).getScheduler( ).scheduleSyncDelayedTask( this, new Runnable( )
 			{
 				public void run( )
 				{
-					timeWarningMinutes( 5 );
+					timeWarningSeconds( 30 );
 				}
-			}, ( long )( ( timeLimit - 5 ) * 60 * 20 ) );
-		}
-		
-		if( timeLimit > 1 )
-		{
-			//1 minute warning
-			getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this, new Runnable( )
+			}, ( long )( ( ( timeLimit * 60 ) - 30 ) * 20 ) );
+			
+			//10 second warning
+			getServer( ).getScheduler( ).scheduleSyncDelayedTask( this, new Runnable( )
 			{
 				public void run( )
 				{
-					timeWarningMinutes( 1 );
+					timeWarningSeconds( 10 );
 				}
-			}, ( long )( ( timeLimit - 1 ) * 60 * 20 ) );
+			}, ( long )( ( ( timeLimit * 60 ) - 10 ) * 20 ) );
+			
+			return true;
 		}
-		
-		//30 seconds warning
-		getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this, new Runnable( )
-		{
-			public void run( )
-			{
-				timeWarningSeconds( 30 );
-			}
-		}, ( long )( ( ( timeLimit * 60 ) - 30 ) * 20 ) );
-		
-		//10 second warning
-		getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this, new Runnable( )
-		{
-			public void run( )
-			{
-				timeWarningSeconds( 10 );
-			}
-		}, ( long )( ( ( timeLimit * 60 ) - 10 ) * 20 ) );
-		
-		return true;
 	}
 	
 	/**
@@ -493,13 +557,24 @@ public class FortressAssault
 	 */
 	private void beginAssault( )
 	{
-		getServer( ).broadcastMessage( ChatColor.DARK_RED + "Begin your assault!" );
+		fortify = false;
+		assault = true;
 		
-		replaceInventoriesAssault( );
-		setGodMode( false );
-		
-		entityListener.pvpListen( true );
-		blockListener.setPhase( false, true );
+		//Make sure both teams have placed their gizmos
+		if( gizmoHandler.gizmosPlaced( ) )
+		{
+			getServer( ).broadcastMessage( ChatColor.DARK_RED + "Begin your assault!" );
+			
+			replaceInventoriesAssault( );
+			setGodMode( false );
+			
+			entityListener.pvpListen( true );
+			blockListener.setPhase( false, true );
+		}
+		else
+		{
+			noGizmoGameOver( );
+		}
 	}
 	
 	/**
@@ -512,7 +587,7 @@ public class FortressAssault
 	{
 		for( int i = 0; i < blueTeam.size( ); i++ )
 		{
-			if( blueTeam.get( i ) == player )
+			if( blueTeam.get( i ).getDisplayName( ).equalsIgnoreCase( player.getDisplayName( ) ) )
 			{
 				return "BLUE";
 			}
@@ -520,7 +595,7 @@ public class FortressAssault
 		
 		for( int i = 0; i < redTeam.size( ); i++ )
 		{
-			if( redTeam.get( i ) == player )
+			if( redTeam.get( i ).getDisplayName( ).equalsIgnoreCase( player.getDisplayName( ) ) )
 			{
 				return "RED";
 			}
@@ -529,9 +604,48 @@ public class FortressAssault
 		return null;
 	}
 	
+	/**
+	 * Returns the list of players for the specified team.
+	 * 
+	 * @param blue True if want blue list, False if red list.
+	 * @return
+	 */
+	public List< Player > getTeamList( boolean blue )
+	{
+		if( blue )
+		{
+			return blueTeam;
+		}
+		
+		return redTeam;
+	}
+	
+	/**
+	 * Returns the list containing the player names.
+	 * 
+	 * @param blue True if want blue list, False if red list.
+	 * @return
+	 */
+	public List< String > getStrList( boolean blue )
+	{
+		if( blue )
+		{
+			return blueStrList;
+		}
+		
+		return redStrList;
+	}
+	
+	/**
+	 * The game ended under normal conditions.<br>
+	 * Prints the results and resets the mod.
+	 */
 	public void gameOver( )
 	{
-		pvpWatcher.printResults( );
+		fortify = false;
+		assault = false;
+		
+		pvpWatcher.printResults( gizmoHandler.getDestroyer( ) );
 		pvpWatcher.clear( );
 		
 		blueTeam.clear( );
@@ -540,4 +654,39 @@ public class FortressAssault
 		entityListener.pvpListen( false );
 		blockListener.setPhase( false, false );
 	}	
+	
+	/**
+	 * If one of the teams did not place their Gizmo, then the game is over.<br>
+	 * The team that did place a Gizmo is declared the winner.
+	 */
+	public void noGizmoGameOver( )
+	{
+		if( gizmoHandler.getPlacedGizmoTeam( ).equalsIgnoreCase( "BLUE" ) )
+		{
+			getServer( ).broadcastMessage( ChatColor.BLUE + "Blue Team " +
+					ChatColor.GOLD + "wins! Other team did not place a Gizmo!" );
+		}
+		else if( gizmoHandler.getPlacedGizmoTeam( ).equalsIgnoreCase( "RED" ) )
+		{
+			getServer( ).broadcastMessage( ChatColor.RED + "Red Team " +
+					ChatColor.GOLD + "wins! Other team did not place a Gizmo!" );
+		}
+		else
+		{
+			getServer( ).broadcastMessage( ChatColor.GOLD + "Neither team placed a Gizmo! No winners." );
+		}
+		
+		fortify = false;
+		assault = false;
+		
+		pvpWatcher.clear( );
+		
+		blueTeam.clear( );
+		redTeam.clear( );
+		
+		gizmoHandler.clearList( );
+		
+		entityListener.pvpListen( false );
+		blockListener.setPhase( false, false );
+	}
 }

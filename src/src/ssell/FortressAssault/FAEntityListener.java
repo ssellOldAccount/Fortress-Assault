@@ -12,6 +12,8 @@ import org.bukkit.event.entity.EntityDamageByProjectileEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityListener;
+import org.bukkit.event.player.PlayerListener;
+import org.bukkit.event.player.PlayerRespawnEvent;
 
 import ssell.FortressAssault.FortressAssault;
 import ssell.FortressAssault.FAPvPWatcher;
@@ -28,6 +30,7 @@ public class FAEntityListener
 	boolean listenToKills = false;
 	
 	List< Player > playerList = new ArrayList< Player >( );
+	List< String > deadPlayers = new ArrayList< String >( );
 	
 	//--------------------------------------------------------------------------------------
 	
@@ -70,18 +73,23 @@ public class FAEntityListener
 		else if( listenToKills )
 		{
 			if( event instanceof EntityDamageByEntityEvent )
-			{
+			{				
 				EntityDamageByEntityEvent damageEvent = ( EntityDamageByEntityEvent  )event;
 				
 				if( ( damageEvent.getDamager( ) instanceof Player ) &&
 					  damageEvent.getEntity( ) instanceof Player )
-				{
+				{					
 					Player victim = ( Player )damageEvent.getEntity( );
 					Player attacker = ( Player )damageEvent.getDamager( );
 					
-					if( ( victim.getHealth( ) - event.getDamage( ) ) <= 0 )
+					if( ( victim.getHealth( ) < event.getDamage( ) ) && ( victim.getHealth( ) != 0 ) )
 					{
-						pvpWatcher.killEvent( victim, attacker );
+						if( onDeadList( victim.getDisplayName( ) ) == -1 )
+						{
+							deadPlayers.add( victim.getDisplayName( ) );
+							
+							pvpWatcher.killEvent( attacker,  victim );
+						}
 					}				
 				}
 			}
@@ -144,5 +152,23 @@ public class FAEntityListener
 		}
 		
 		return false;
+	}
+	
+	public int onDeadList( String name )
+	{
+		for( int i = 0; i < deadPlayers.size( ); i++ )
+		{
+			if( deadPlayers.get( i ).equalsIgnoreCase( name ) )
+			{
+				return i;
+			}
+		}
+		
+		return -1;
+	}
+	
+	public void removeFromDeadList( int location )
+	{
+		deadPlayers.remove( location );
 	}
 }

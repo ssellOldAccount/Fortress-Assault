@@ -24,18 +24,16 @@ public class FABlockListener
 	private boolean fortifyPhase = false;
 	private boolean assaultPhase = false;
 	
-	public FABlockListener( FortressAssault instance )
+	public FABlockListener( FortressAssault instance, FAGizmoHandler gizmo )
 	{
 		plugin = instance;
-		gizmoHandler = new FAGizmoHandler( plugin, 2 );
+		gizmoHandler = gizmo;
 	}
 	
 	public void onBlockDamage( BlockDamageEvent event )
 	{
 		Block block = event.getBlock( );
 		Player player = event.getPlayer( );
-		
-		plugin.getServer( ).broadcastMessage( ChatColor.YELLOW + "Damage" );
 		
 		if( block.getType( ) == Material.SPONGE )
 		{

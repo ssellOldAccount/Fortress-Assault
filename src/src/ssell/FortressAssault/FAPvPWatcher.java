@@ -14,14 +14,14 @@ public class FAPvPWatcher
 {	
 	public class FAPlayer
 	{
-		public Player player;
+		public String player;
 		public int kills;
 		public int deaths;
 		public int destructions;
 		
 		public FAPlayer( Player p_Player )
 		{
-			player = p_Player;
+			player = p_Player.getDisplayName( );
 			
 			kills = 0;
 			deaths = 0;
@@ -45,6 +45,7 @@ public class FAPvPWatcher
 	{
 		if( getPlayer( player ) == null )
 		{
+			parent.getServer( ).broadcastMessage( ChatColor.AQUA + player.getDisplayName( ) + " added" );
 			playerList.add( new FAPlayer( player ) );
 		}
 	}
@@ -53,7 +54,7 @@ public class FAPvPWatcher
 	{
 		for( int i = 0; i < playerList.size( ); i++ )
 		{
-			if( playerList.get( i ).player == player )
+			if( playerList.get( i ).player == player.getDisplayName( ) )
 			{
 				playerList.remove( i );
 				
@@ -75,11 +76,11 @@ public class FAPvPWatcher
 		FAPlayer tempPlayer;
 		
 		//----------------------------------------------------------------------------------
-		
+
 		if( ( killerStr != null ) && ( killedStr != null ) )
 		{
 			//If a player killed a teammate.
-			if( killerStr.equals( killedStr ) )
+			if( killerStr.equalsIgnoreCase( killedStr ) )
 			{
 				if( killerStr.equals( "BLUE" ) )
 				{
@@ -155,10 +156,13 @@ public class FAPvPWatcher
 	
 	public FAPlayer getPlayer( Player player )
 	{
+		parent.getServer( ).broadcastMessage( ChatColor.AQUA + player.getDisplayName( ) + " was requested" );
+		
 		for( int i = 0; i < playerList.size( ); i++ )
 		{
-			if( playerList.get( i ).player == player )
+			if( playerList.get( i ).player.equalsIgnoreCase( player.getDisplayName( ) ) )
 			{
+				parent.getServer( ).broadcastMessage( ChatColor.AQUA + playerList.get( i ).player + " was found" );
 				return playerList.get( i );
 			}
 		}
@@ -175,7 +179,7 @@ public class FAPvPWatcher
 	 * # RedA | 15 | 16 | 0<br>
 	 * # RedB | 3 | 0 |<br>
 	 */
-	public void printResults( )
+	public void printResults( String destroyer )
 	{
 		boolean blueWon = false;
 		
@@ -183,7 +187,8 @@ public class FAPvPWatcher
 		{
 			if( playerList.get( i ).destructions != 0 )
 			{
-				blueWon = parent.getTeam( playerList.get( i ).player ).equals( "BLUE" );
+				blueWon = parent.getTeam( 
+				parent.getServer( ).getPlayer( playerList.get( i ).player ) ).equals( "BLUE" );
 			
 				break;
 			}
@@ -192,23 +197,30 @@ public class FAPvPWatcher
 		//Sort players by kill total
 		sortList( );
 		
-		parent.getServer( ).broadcastMessage( ChatColor.YELLOW + "# Battle Results\n" +
+		parent.getServer( ).broadcastMessage( ChatColor.YELLOW + "# Battle Results" );
+		parent.getServer( ).broadcastMessage( ChatColor.YELLOW + 
 				"# Name | Kills | Deaths | Destructions" );
-		
+			
 		for( int i = 0; i < playerList.size( ); i++ )
 		{
 			FAPlayer player = playerList.get( i );
 			
-			if( parent.getTeam( player.player ).equals( "BLUE" ) )
+			if( player.player.equalsIgnoreCase( destroyer ) )
+			{
+				player.destructions += 1;
+			}
+			
+			if( parent.getTeam( 
+				parent.getServer( ).getPlayer( playerList.get( i ).player ) ).equals( "BLUE" ) )
 			{
 				parent.getServer( ).broadcastMessage( ChatColor.YELLOW + "# " +
-				ChatColor.BLUE + player.player.getDisplayName( ) + " | " + player.kills + " | " +
+				ChatColor.BLUE + player.player + " | " + player.kills + " | " +
 				player.deaths + " | " + player.destructions );
 			}
 			else
 			{
 				parent.getServer( ).broadcastMessage( ChatColor.YELLOW + "# " +
-				ChatColor.RED + player.player.getDisplayName( ) + " | " + player.kills + " | " +
+				ChatColor.RED + player.player + " | " + player.kills + " | " +
 				player.deaths + " | " + player.destructions );
 			}
 		}
