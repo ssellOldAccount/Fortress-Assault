@@ -22,6 +22,8 @@ import org.bukkit.plugin.PluginLoader;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.PluginManager;
 
+import ssell.FortressAssault.FAPvPWatcher;
+
 //------------------------------------------------------------------------------------------
 
 /**
@@ -40,15 +42,21 @@ public class FortressAssault
 	
 	private final FABlockListener blockListener = new FABlockListener( this );
 	private final FAEntityListener entityListener = new FAEntityListener( this );
+	private final FAPvPWatcher pvpWatcher = new FAPvPWatcher( this );
 	
 	private int resources = 2;			//Default resource level (normal)
-	private int timeLimit = 15;			//Default time limit to build
+	private int timeLimit = 1;			//Default time limit to build
 	
 	private final List< Player > blueTeam = new ArrayList< Player >( );
 	private final List< Player > redTeam = new ArrayList< Player >( );
 	
 	//--------------------------------------------------------------------------------------
 
+	public FAPvPWatcher getWatcher( )
+	{
+		return pvpWatcher;
+	}
+	
 	public void onDisable( ) 
 	{
 		log.info( "Fortress Assault is disabled!" );
@@ -61,14 +69,15 @@ public class FortressAssault
 	{
 		PluginManager pluginMgr = getServer( ).getPluginManager( );
 		
-		//Register relevant block event
-		//pluginMgr.registerEvent( Event.Type.BLOCK_RIGHTCLICKED, blockListener, 
-		//		                 Event.Priority.High, this );
-		
+		//Register for events
+		pluginMgr.registerEvent( Event.Type.BLOCK_DAMAGED, blockListener, 
+				                 Event.Priority.High, this );
+		pluginMgr.registerEvent( Event.Type.BLOCK_PLACED, blockListener,
+				                 Event.Priority.Normal, this );
 		pluginMgr.registerEvent( Event.Type.ENTITY_DAMAGED, entityListener,
 								 Event.Priority.Normal, this );
 		
-		log.info( "Fortress Assault v0.2.0 is enabled!" );
+		log.info( "Fortress Assault v0.3.0 is enabled!" );
 	}
 	
 	/**
@@ -278,6 +287,8 @@ public class FortressAssault
 		replaceInventoriesFortify( );
 		setGodMode( true );
 		
+		blockListener.setPhase( true, false );
+		
 		//----------------------------------------------------------------------------------
 		// Set up the counters
 		
@@ -400,13 +411,36 @@ public class FortressAssault
 			
 			temp.getInventory( ).clear( );
 			
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_AXE ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SPADE ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_AXE, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SPADE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.STONE, ( resources * 64 ) ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.COBBLESTONE, ( resources * 3 * 64 ) ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.WOOD, ( int )( resources * 0.5 * 64 ) ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.TORCH, 64 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.SPONGE, 1 ) );
+		}
+		
+		for( int i = 0; i < redTeam.size( ); i++ )
+		{
+			Player temp = redTeam.get( i );
+			
+			temp.sendMessage( ChatColor.YELLOW + "Replacing your inventory. You will get it back after the event." );
+			
+			//
+			//Inventory stash code here!
+			//
+			
+			temp.getInventory( ).clear( );
+			
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_AXE, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SPADE, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.STONE, ( resources * 64 ) ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.COBBLESTONE, ( resources * 3 * 64 ) ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.WOOD, ( int )( resources * 0.5 * 64 ) ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.TORCH, 64 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.SPONGE, 1 ) );
 		}
 	}
 	
@@ -421,17 +455,17 @@ public class FortressAssault
 			
 			temp.getInventory( ).clear( );
 			
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_HELMET ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_CHESTPLATE ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_LEGGINGS ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_BOOTS ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_HELMET, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_BOOTS, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.TNT, 3 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.LADDER, 6 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.BREAD ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
 		}
 		
 		for( int i = 0; i < redTeam.size( ); i++ )
@@ -440,17 +474,17 @@ public class FortressAssault
 			
 			temp.getInventory( ).clear( );
 			
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_HELMET ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_CHESTPLATE ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_LEGGINGS ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_BOOTS ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_HELMET, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.IRON_BOOTS, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.TNT, 3 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.LADDER, 6 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
 		}
 	}
 	
@@ -463,8 +497,47 @@ public class FortressAssault
 		
 		replaceInventoriesAssault( );
 		setGodMode( false );
+		
+		entityListener.pvpListen( true );
+		blockListener.setPhase( false, true );
 	}
 	
+	/**
+	 * Returns which team the specified player is on.
+	 * 
+	 * @param player
+	 * @return
+	 */
+	public String getTeam( Player player )
+	{
+		for( int i = 0; i < blueTeam.size( ); i++ )
+		{
+			if( blueTeam.get( i ) == player )
+			{
+				return "BLUE";
+			}
+		}
+		
+		for( int i = 0; i < redTeam.size( ); i++ )
+		{
+			if( redTeam.get( i ) == player )
+			{
+				return "RED";
+			}
+		}
+		
+		return null;
+	}
 	
-	
+	public void gameOver( )
+	{
+		pvpWatcher.printResults( );
+		pvpWatcher.clear( );
+		
+		blueTeam.clear( );
+		redTeam.clear( );
+		
+		entityListener.pvpListen( false );
+		blockListener.setPhase( false, false );
+	}	
 }
