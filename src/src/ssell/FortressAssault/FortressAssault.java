@@ -6,6 +6,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 import org.bukkit.ChatColor;
@@ -17,6 +18,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.PluginLoader;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -55,6 +57,8 @@ public class FortressAssault
 	
 	private boolean fortify = false;
 	private boolean assault = false;
+	
+	private List< JavaPair< String, PlayerInventory > > inventoryList = new ArrayList< JavaPair< String, PlayerInventory > >( );
 	
 	//--------------------------------------------------------------------------------------
 
@@ -227,27 +231,43 @@ public class FortressAssault
 	 */
 	public void addPlayer( Player sender, String team, String toAdd )
 	{
+		//Valid team color
 		if( team.equalsIgnoreCase( "blue" ) || team.equalsIgnoreCase( "red" ) )
 		{
 			Player tempPlayer = getServer( ).getPlayer( toAdd );
 			
-			if( tempPlayer.getDisplayName( ).equalsIgnoreCase( toAdd ) )
+			//Valid player
+			if( tempPlayer != null )
 			{
-				if( tempPlayer != null )
+				//Player not already on a team
+				if( getTeam( tempPlayer ) == null )
 				{
-					if( team.equalsIgnoreCase( "blue" ) )
+					if( team.equalsIgnoreCase( "BLUE" ) )
 					{
 						blueTeam.add( tempPlayer );
 						blueStrList.add( toAdd );
-						
+							
 						getServer( ).broadcastMessage( ChatColor.BLUE + toAdd + " added to Blue Team!" );
 					}
 					else
 					{
 						redTeam.add( tempPlayer );
 						redStrList.add( toAdd );
-						
+							
 						getServer( ).broadcastMessage( ChatColor.RED + toAdd + " added to Red Team!" );
+					}
+				}
+				else
+				{
+					if( getTeam( tempPlayer ).equalsIgnoreCase( "BLUE" ) )
+					{
+						sender.sendMessage( ChatColor.DARK_RED + "That player is already on the " +
+						ChatColor.BLUE + "Blue Team" + ChatColor.DARK_RED + "!" );
+					}
+					else if( getTeam( tempPlayer ).equalsIgnoreCase( "RED" ) )
+					{
+						sender.sendMessage( ChatColor.DARK_RED + "That player is already on the " +
+						ChatColor.RED + "Red Team" + ChatColor.DARK_RED + "!" );
 					}
 				}
 			}
@@ -272,7 +292,7 @@ public class FortressAssault
 		if( ( fortify == true ) || ( assault == true ) )
 		{
 			//If the sender is part of the game
-			if( getTeam( sender ) != "null" )
+			if( getTeam( sender ) != null )
 			{
 				getServer( ).broadcastMessage( ChatColor.YELLOW + sender.getDisplayName( ) +
 						" has stopped the current game of Fortress Assault." );
@@ -280,12 +300,17 @@ public class FortressAssault
 				fortify = false;
 				assault = false;
 				
-				//returnInventories( );
+				returnInventory( null );
+				inventoryList.clear( );
 				
 				pvpWatcher.clear( );
 				
+				gizmoHandler.clearList( );
+				
 				entityListener.pvpListen( false );
 				blockListener.setPhase( false, false );
+				
+				getServer( ).getScheduler( ).cancelTasks( this );
 			}
 			else
 			{
@@ -469,10 +494,11 @@ public class FortressAssault
 			
 			temp.sendMessage( ChatColor.YELLOW + "Replacing your inventory. You will get it back after the event." );
 			
-			//
-			//Inventory stash code here!
-			//
+			//Stash inventories	
+			PlayerInventory newInventory = temp.getInventory( );
+			inventoryList.add( new JavaPair< String, PlayerInventory>( temp.getDisplayName( ), newInventory ) );
 			
+			//Clear and replace
 			temp.getInventory( ).clear( );
 			
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
@@ -491,10 +517,11 @@ public class FortressAssault
 			
 			temp.sendMessage( ChatColor.YELLOW + "Replacing your inventory. You will get it back after the event." );
 			
-			//
-			//Inventory stash code here!
-			//
+			//Stash inventories	
+			PlayerInventory newInventory = temp.getInventory( );
+			inventoryList.add( new JavaPair< String, PlayerInventory>( temp.getDisplayName( ), newInventory ) );
 			
+			//Clear and replace
 			temp.getInventory( ).clear( );
 			
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
@@ -648,11 +675,18 @@ public class FortressAssault
 		pvpWatcher.printResults( gizmoHandler.getDestroyer( ) );
 		pvpWatcher.clear( );
 		
+		gizmoHandler.clearList( );
+		
 		blueTeam.clear( );
 		redTeam.clear( );
 		
+		returnInventory( null );
+		inventoryList.clear( );
+		
 		entityListener.pvpListen( false );
 		blockListener.setPhase( false, false );
+		
+		getServer( ).getScheduler( ).cancelTasks( this );
 	}	
 	
 	/**
@@ -684,9 +718,89 @@ public class FortressAssault
 		blueTeam.clear( );
 		redTeam.clear( );
 		
+		returnInventory( null );
+		inventoryList.clear( );
+		
 		gizmoHandler.clearList( );
 		
 		entityListener.pvpListen( false );
 		blockListener.setPhase( false, false );
+		
+		getServer( ).getScheduler( ).cancelTasks( this );
+	}
+	
+	/**
+	 * Returns the inventory to the specified player.<br>
+	 * If null is passed, then it returns all inventories.
+	 * 
+	 * @param player Specific player, or null for all.
+	 */
+	public void returnInventory( Player player )
+	{
+		if( player != null )
+		{
+			for( int i = 0; i < inventoryList.size( ); i++ )
+			{
+				if( inventoryList.get( i ).first.equalsIgnoreCase( player.getDisplayName( ) ) )
+				{	
+					//Stashed inventory found.
+					PlayerInventory oldInventory = inventoryList.get( i ).second;
+					
+					if( oldInventory != null )
+					{
+						PlayerInventory newInventory = player.getInventory( );
+						
+						newInventory.clear( );
+						
+						for( int j = 0; j < oldInventory.getSize( ); j++ )
+						{
+							if( oldInventory.getItem( j ) != null )
+							{
+								newInventory.addItem( oldInventory.getItem( j ) );
+							}
+						}
+						
+						inventoryList.remove( i );	
+					}
+					
+					break;
+				}
+			}
+		}
+		else
+		{
+			for( int i = 0; i < inventoryList.size( ); i++ )
+			{
+				Player tempPlayer = getServer( ).getPlayer( inventoryList.get( i ).first );
+				PlayerInventory oldInventory = inventoryList.get( i ).second;
+				
+				log.info( "Player Getting Inventory: " + tempPlayer.getDisplayName( ) );
+				
+				if( ( tempPlayer != null ) && ( oldInventory != null ) )
+				{
+					log.info( "Not null" );
+					
+					tempPlayer.getInventory( ).clear( );
+					
+					for( int j = 0; j < oldInventory.getSize( ); j++ )
+					{
+						log.info( "In old inventory" );
+						
+						ItemStack newStack = new ItemStack( oldInventory.getItem( j ).getType( ), oldInventory.getItem( j ).getAmount( ) );
+						
+						if( newStack != null )
+						{
+							log.info( "\tNot Null" );
+							tempPlayer.getInventory( ).addItem( newStack );
+							log.info( "\tAdded" );
+							
+							
+						}
+					}
+				}
+			}
+			
+			inventoryList.clear( );
+		}
 	}
 }

@@ -82,11 +82,17 @@ public class FAEntityListener
 					Player victim = ( Player )damageEvent.getEntity( );
 					Player attacker = ( Player )damageEvent.getDamager( );
 					
-					if( ( victim.getHealth( ) < event.getDamage( ) ) && ( victim.getHealth( ) != 0 ) )
+					int damage = event.getDamage( );
+					int oldHealth = victim.getHealth( );
+					int newHealth = oldHealth - damage;
+					
+					if( newHealth <= 0 )
 					{
 						if( onDeadList( victim.getDisplayName( ) ) == -1 )
 						{
 							deadPlayers.add( victim.getDisplayName( ) );
+							
+							victim.getInventory( ).clear( );
 							
 							pvpWatcher.killEvent( attacker,  victim );
 						}

@@ -95,7 +95,7 @@ public class FAGizmoHandler
 			return gizmoList.get( 0 ).team;
 		}
 		
-		return "null";
+		return null;
 	}
 	
 	public boolean isGizmo( Block block )
@@ -207,9 +207,7 @@ public class FAGizmoHandler
 			}
 			
 			//Game is over.
-			plugin.gameOver( );
-			
-			clearList( );	
+			plugin.gameOver( );	
 		}
 	}
 	

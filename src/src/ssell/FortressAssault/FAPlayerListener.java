@@ -1,9 +1,11 @@
 package ssell.FortressAssault;
 
 import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerListener;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.inventory.ItemStack;
 
 public class FAPlayerListener 
 	extends PlayerListener
@@ -45,9 +47,6 @@ public class FAPlayerListener
 			{
 				found = true;
 				
-				plugin.getServer().broadcastMessage( ChatColor.BLUE + 
-						player.getDisplayName( ) + " readded to blue" );
-				
 				plugin.getTeamList( true ).add( player );
 			}
 		}
@@ -59,17 +58,33 @@ public class FAPlayerListener
 				System.out.println( plugin.getStrList( true ).get( i ) + "\t" + player.getDisplayName( ) );
 				
 				if( plugin.getStrList( false ).get( i ).equalsIgnoreCase( player.getDisplayName( ) ) )
-				{
-					plugin.getServer().broadcastMessage( ChatColor.RED + 
-							player.getDisplayName( ) + " readded to red" );
+				{		
+					found = true;
 					
 					plugin.getTeamList( false ).add( player );
 				}
 			}
 		}
 		
+		//Resupply the player
+		if( found )
+		{
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_HELMET, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_BOOTS, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.WOOD_PICKAXE, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.TNT, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.LADDER, 3 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
+		}
+		
 		//Take care of the dead list in the EntityListener
 		int position = entityListener.onDeadList( player.getDisplayName( ) );
+		
 		if(  position != -1 )
 		{
 			entityListener.removeFromDeadList( position );
