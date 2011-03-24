@@ -1,9 +1,0 @@
-* /faSwitch *future release*
-* /faGetTime
-* /faQuit
-
-Was last trying to get returning inventories to work.
-Null at .addItem( );
-
-
-Restocking upon spawn does not seem to be working either.
