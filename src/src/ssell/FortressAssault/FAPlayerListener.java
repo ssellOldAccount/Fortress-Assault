@@ -1,6 +1,5 @@
 package ssell.FortressAssault;
 
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerListener;
@@ -24,7 +23,7 @@ public class FAPlayerListener
 	{	
 		final PlayerRespawnEvent finalEvent = event;
 				
-		plugin.getServer( ).getScheduler( ).scheduleSyncDelayedTask( plugin, new Runnable( ) 
+		plugin.getServer( ).getScheduler( ).scheduleAsyncDelayedTask( plugin, new Runnable( ) 
 		{
 			public void run( )
 			{
@@ -40,9 +39,7 @@ public class FAPlayerListener
 		Player player = event.getPlayer( );
 		
 		for( int i = 0; i < plugin.getStrList( true ).size( ); i++ )
-		{
-			System.out.println( plugin.getStrList( true ).get( i ) + "\t" + player.getDisplayName( ) );
-			
+		{			
 			if( plugin.getStrList( true ).get( i ).equalsIgnoreCase( player.getDisplayName( ) ) )
 			{
 				found = true;
@@ -54,9 +51,7 @@ public class FAPlayerListener
 		if( !found )
 		{
 			for( int i = 0; i < plugin.getStrList( false ).size( ); i++ )
-			{
-				System.out.println( plugin.getStrList( true ).get( i ) + "\t" + player.getDisplayName( ) );
-				
+			{				
 				if( plugin.getStrList( false ).get( i ).equalsIgnoreCase( player.getDisplayName( ) ) )
 				{		
 					found = true;
@@ -65,21 +60,29 @@ public class FAPlayerListener
 				}
 			}
 		}
-		
+
 		//Resupply the player
 		if( found )
-		{
+		{			
+			player = plugin.getServer( ).getPlayer( player.getDisplayName( ) );
+			
+			player.getInventory( ).clear( );
+		
+			player.getInventory( ).setHelmet( new ItemStack( Material.IRON_HELMET, 1 ) );
+			player.getInventory( ).setChestplate( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
+			player.getInventory( ).setLeggings( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
+			player.getInventory( ).setBoots( new ItemStack( Material.IRON_BOOTS, 1 ) );
+			
 			player.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
-			player.getInventory( ).addItem( new ItemStack( Material.IRON_HELMET, 1 ) );
-			player.getInventory( ).addItem( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
-			player.getInventory( ).addItem( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
-			player.getInventory( ).addItem( new ItemStack( Material.IRON_BOOTS, 1 ) );
+			
 			player.getInventory( ).addItem( new ItemStack( Material.WOOD_PICKAXE, 1 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.TNT, 1 ) );
-			player.getInventory( ).addItem( new ItemStack( Material.LADDER, 3 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
+			
+			//DEPRECATED. need to find alternative
+			player.updateInventory( );
 		}
 		
 		//Take care of the dead list in the EntityListener

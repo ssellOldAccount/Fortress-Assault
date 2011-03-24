@@ -170,7 +170,7 @@ public class FAGizmoHandler
 				final FAGizmo finalGizmo = gizmo;
 				
 				//Start counting
-				plugin.getServer( ).getScheduler( ).scheduleSyncDelayedTask( plugin, 
+				plugin.getServer( ).getScheduler( ).scheduleAsyncDelayedTask( plugin, 
 						new Runnable( )
 				{
 					public void run( )

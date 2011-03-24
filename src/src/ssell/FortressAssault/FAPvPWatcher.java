@@ -45,7 +45,6 @@ public class FAPvPWatcher
 	{
 		if( getPlayer( player ) == null )
 		{
-			parent.getServer( ).broadcastMessage( ChatColor.AQUA + player.getDisplayName( ) + " added" );
 			playerList.add( new FAPlayer( player ) );
 		}
 	}
@@ -155,14 +154,11 @@ public class FAPvPWatcher
 	}
 	
 	public FAPlayer getPlayer( Player player )
-	{
-		parent.getServer( ).broadcastMessage( ChatColor.AQUA + player.getDisplayName( ) + " was requested" );
-		
+	{		
 		for( int i = 0; i < playerList.size( ); i++ )
 		{
 			if( playerList.get( i ).player.equalsIgnoreCase( player.getDisplayName( ) ) )
 			{
-				parent.getServer( ).broadcastMessage( ChatColor.AQUA + playerList.get( i ).player + " was found" );
 				return playerList.get( i );
 			}
 		}

@@ -2,32 +2,25 @@ package ssell.FortressAssault;
 
 //------------------------------------------------------------------------------------------
 
-import java.io.File;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Logger;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
-import org.bukkit.Server;
-import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.plugin.PluginDescriptionFile;
-import org.bukkit.plugin.PluginLoader;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.PluginManager;
 
 //------------------------------------------------------------------------------------------
 
 /**
- * Assault Fortress : Player vs Player Mod<br>
+ * Fortress Assault : Player vs Player Mod<br>
  * Minecraft - Bukkit<br><br>
  * http://www.1143pm.com/
  * 
@@ -58,7 +51,7 @@ public class FortressAssault
 	private boolean fortify = false;
 	private boolean assault = false;
 	
-	private List< JavaPair< String, PlayerInventory > > inventoryList = new ArrayList< JavaPair< String, PlayerInventory > >( );
+	private List< JavaPair< String, List< ItemStack > > > inventoryList = new ArrayList< JavaPair< String, List< ItemStack > > >( );
 	
 	//--------------------------------------------------------------------------------------
 
@@ -89,7 +82,7 @@ public class FortressAssault
 		pluginMgr.registerEvent( Event.Type.PLAYER_RESPAWN, playerListener,
 								 Event.Priority.Normal, this );
 		
-		log.info( "Fortress Assault v0.4.0 is enabled!" );
+		log.info( "Fortress Assault v1.1.0 is enabled!" );
 	}
 	
 	/**
@@ -297,11 +290,10 @@ public class FortressAssault
 				getServer( ).broadcastMessage( ChatColor.YELLOW + sender.getDisplayName( ) +
 						" has stopped the current game of Fortress Assault." );
 				
+				getServer( ).getScheduler( ).cancelTasks( this );
+				
 				fortify = false;
 				assault = false;
-				
-				returnInventory( null );
-				inventoryList.clear( );
 				
 				pvpWatcher.clear( );
 				
@@ -310,7 +302,7 @@ public class FortressAssault
 				entityListener.pvpListen( false );
 				blockListener.setPhase( false, false );
 				
-				getServer( ).getScheduler( ).cancelTasks( this );
+				returnInventory( null );
 			}
 			else
 			{
@@ -346,6 +338,8 @@ public class FortressAssault
 			fortify = true;
 			assault = false;
 			
+			getServer( ).broadcastMessage( ChatColor.YELLOW + "Start Fortifying!" );
+			
 			//Want to warn about each separate team
 			if( blueTeam.size( ) == 0 )
 			{
@@ -380,7 +374,7 @@ public class FortressAssault
 			//----------------------------------------------------------------------------------
 			// Set up the counters
 		
-			getServer( ).getScheduler( ).scheduleSyncDelayedTask( this , new Runnable( ) 
+			getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this , new Runnable( ) 
 			{
 			    public void run( ) 
 			    {
@@ -391,7 +385,7 @@ public class FortressAssault
 			if( timeLimit > 5 )
 			{
 				//5 minute warning
-				getServer( ).getScheduler( ).scheduleSyncDelayedTask( this, new Runnable( )
+				getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this, new Runnable( )
 				{
 					public void run( )
 					{
@@ -403,7 +397,7 @@ public class FortressAssault
 			if( timeLimit > 1 )
 			{
 				//1 minute warning
-				getServer( ).getScheduler( ).scheduleSyncDelayedTask( this, new Runnable( )
+				getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this, new Runnable( )
 				{
 					public void run( )
 					{
@@ -413,7 +407,7 @@ public class FortressAssault
 			}
 			
 			//30 seconds warning
-			getServer( ).getScheduler( ).scheduleSyncDelayedTask( this, new Runnable( )
+			getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this, new Runnable( )
 			{
 				public void run( )
 				{
@@ -422,7 +416,7 @@ public class FortressAssault
 			}, ( long )( ( ( timeLimit * 60 ) - 30 ) * 20 ) );
 			
 			//10 second warning
-			getServer( ).getScheduler( ).scheduleSyncDelayedTask( this, new Runnable( )
+			getServer( ).getScheduler( ).scheduleAsyncDelayedTask( this, new Runnable( )
 			{
 				public void run( )
 				{
@@ -495,12 +489,22 @@ public class FortressAssault
 			temp.sendMessage( ChatColor.YELLOW + "Replacing your inventory. You will get it back after the event." );
 			
 			//Stash inventories	
-			PlayerInventory newInventory = temp.getInventory( );
-			inventoryList.add( new JavaPair< String, PlayerInventory>( temp.getDisplayName( ), newInventory ) );
+			List< ItemStack > newList = new ArrayList< ItemStack >( );
+			
+			for( int j = 0; j < 36; j++ )
+			{
+				if( temp.getInventory( ).getItem( j ) != null )
+				{
+					newList.add( temp.getInventory( ).getItem( j ) );
+				}
+			}
+			
+			inventoryList.add( new JavaPair< String, List< ItemStack > >( temp.getDisplayName( ), newList ) );
 			
 			//Clear and replace
 			temp.getInventory( ).clear( );
 			
+			temp.getInventory( ).addItem( new ItemStack( Material.SPONGE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_AXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SPADE, 1 ) );
@@ -508,7 +512,6 @@ public class FortressAssault
 			temp.getInventory( ).addItem( new ItemStack( Material.COBBLESTONE, ( resources * 3 * 64 ) ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.WOOD, ( int )( resources * 0.5 * 64 ) ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.TORCH, 64 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.SPONGE, 1 ) );
 		}
 		
 		for( int i = 0; i < redTeam.size( ); i++ )
@@ -518,12 +521,22 @@ public class FortressAssault
 			temp.sendMessage( ChatColor.YELLOW + "Replacing your inventory. You will get it back after the event." );
 			
 			//Stash inventories	
-			PlayerInventory newInventory = temp.getInventory( );
-			inventoryList.add( new JavaPair< String, PlayerInventory>( temp.getDisplayName( ), newInventory ) );
+			List< ItemStack > newList = new ArrayList< ItemStack >( );
+			
+			for( int j = 0; j < 36; j++ )
+			{
+				if( temp.getInventory( ).getItem( j ) != null )
+				{
+					newList.add( temp.getInventory( ).getItem( j ) );
+				}
+			}
+			
+			inventoryList.add( new JavaPair< String, List< ItemStack > >( temp.getDisplayName( ), newList ) );
 			
 			//Clear and replace
 			temp.getInventory( ).clear( );
 			
+			temp.getInventory( ).addItem( new ItemStack( Material.SPONGE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_AXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SPADE, 1 ) );
@@ -531,7 +544,6 @@ public class FortressAssault
 			temp.getInventory( ).addItem( new ItemStack( Material.COBBLESTONE, ( resources * 3 * 64 ) ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.WOOD, ( int )( resources * 0.5 * 64 ) ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.TORCH, 64 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.SPONGE, 1 ) );
 		}
 	}
 	
@@ -546,11 +558,12 @@ public class FortressAssault
 			
 			temp.getInventory( ).clear( );
 			
+			temp.getInventory( ).setHelmet( new ItemStack( Material.IRON_HELMET, 1 ) );
+			temp.getInventory( ).setChestplate( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
+			temp.getInventory( ).setLeggings( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
+			temp.getInventory( ).setBoots( new ItemStack( Material.IRON_BOOTS, 1 ) );
+			
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_HELMET, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_BOOTS, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.TNT, 3 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.LADDER, 6 ) );
@@ -565,11 +578,12 @@ public class FortressAssault
 			
 			temp.getInventory( ).clear( );
 			
+			temp.getInventory( ).setHelmet( new ItemStack( Material.IRON_HELMET, 1 ) );
+			temp.getInventory( ).setChestplate( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
+			temp.getInventory( ).setLeggings( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
+			temp.getInventory( ).setBoots( new ItemStack( Material.IRON_BOOTS, 1 ) );
+			
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_HELMET, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_BOOTS, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.TNT, 3 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.LADDER, 6 ) );
@@ -646,7 +660,6 @@ public class FortressAssault
 		
 		return redTeam;
 	}
-	
 	/**
 	 * Returns the list containing the player names.
 	 * 
@@ -669,24 +682,23 @@ public class FortressAssault
 	 */
 	public void gameOver( )
 	{
+		getServer( ).getScheduler( ).cancelTasks( this );
+		
 		fortify = false;
 		assault = false;
 		
 		pvpWatcher.printResults( gizmoHandler.getDestroyer( ) );
 		pvpWatcher.clear( );
 		
-		gizmoHandler.clearList( );
-		
 		blueTeam.clear( );
 		redTeam.clear( );
 		
 		returnInventory( null );
-		inventoryList.clear( );
 		
 		entityListener.pvpListen( false );
 		blockListener.setPhase( false, false );
 		
-		getServer( ).getScheduler( ).cancelTasks( this );
+		returnInventory( null );
 	}	
 	
 	/**
@@ -710,6 +722,8 @@ public class FortressAssault
 			getServer( ).broadcastMessage( ChatColor.GOLD + "Neither team placed a Gizmo! No winners." );
 		}
 		
+		getServer( ).getScheduler( ).cancelTasks( this );
+		
 		fortify = false;
 		assault = false;
 		
@@ -718,15 +732,12 @@ public class FortressAssault
 		blueTeam.clear( );
 		redTeam.clear( );
 		
-		returnInventory( null );
-		inventoryList.clear( );
-		
 		gizmoHandler.clearList( );
 		
 		entityListener.pvpListen( false );
 		blockListener.setPhase( false, false );
 		
-		getServer( ).getScheduler( ).cancelTasks( this );
+		returnInventory( null );
 	}
 	
 	/**
@@ -744,7 +755,7 @@ public class FortressAssault
 				if( inventoryList.get( i ).first.equalsIgnoreCase( player.getDisplayName( ) ) )
 				{	
 					//Stashed inventory found.
-					PlayerInventory oldInventory = inventoryList.get( i ).second;
+					List< ItemStack > oldInventory = inventoryList.get( i ).second;
 					
 					if( oldInventory != null )
 					{
@@ -752,15 +763,15 @@ public class FortressAssault
 						
 						newInventory.clear( );
 						
-						for( int j = 0; j < oldInventory.getSize( ); j++ )
+						for( int j = 0; j < oldInventory.size( ); j++ )
 						{
-							if( oldInventory.getItem( j ) != null )
-							{
-								newInventory.addItem( oldInventory.getItem( j ) );
-							}
+							newInventory.addItem( oldInventory.get( j ) );
 						}
 						
-						inventoryList.remove( i );	
+						inventoryList.remove( i );
+						
+						//DEPRECATED. need to find alternative
+						player.updateInventory( );
 					}
 					
 					break;
@@ -769,34 +780,34 @@ public class FortressAssault
 		}
 		else
 		{
+			
 			for( int i = 0; i < inventoryList.size( ); i++ )
 			{
 				Player tempPlayer = getServer( ).getPlayer( inventoryList.get( i ).first );
-				PlayerInventory oldInventory = inventoryList.get( i ).second;
 				
-				log.info( "Player Getting Inventory: " + tempPlayer.getDisplayName( ) );
+				//Stashed inventory found.
+				List< ItemStack > oldInventory = inventoryList.get( i ).second;
 				
-				if( ( tempPlayer != null ) && ( oldInventory != null ) )
+				if( ( oldInventory != null ) && ( tempPlayer != null ) )
 				{
-					log.info( "Not null" );
+					PlayerInventory newInventory = tempPlayer.getInventory( );
 					
-					tempPlayer.getInventory( ).clear( );
+					newInventory.clear( );
 					
-					for( int j = 0; j < oldInventory.getSize( ); j++ )
+					//Add old items into the inventory
+					for( int j = 0; j < oldInventory.size( ); j++ )
 					{
-						log.info( "In old inventory" );
-						
-						ItemStack newStack = new ItemStack( oldInventory.getItem( j ).getType( ), oldInventory.getItem( j ).getAmount( ) );
-						
-						if( newStack != null )
+						if( oldInventory.get( j ) != null )
 						{
-							log.info( "\tNot Null" );
-							tempPlayer.getInventory( ).addItem( newStack );
-							log.info( "\tAdded" );
-							
-							
+							if( oldInventory.get( j ).getType( ) != Material.AIR )
+							{
+								newInventory.addItem( oldInventory.get( j ) );
+							}
 						}
 					}
+					
+					//DEPRECATED. need to find alternative
+					tempPlayer.updateInventory( );
 				}
 			}
 			
