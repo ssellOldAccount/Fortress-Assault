@@ -41,7 +41,7 @@ public class FortressAssault
 	private final FAPlayerListener playerListener = new FAPlayerListener( this, entityListener );
 	
 	private int resources = 2;			//Default resource level (normal)
-	private int timeLimit = 1;			//Default time limit to build
+	private int timeLimit = 5;			//Default time limit to build
 	
 	private final List< Player > blueTeam = new ArrayList< Player >( );
 	private final List< Player > redTeam = new ArrayList< Player >( );
@@ -586,7 +586,7 @@ public class FortressAssault
 			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.TNT, 3 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.LADDER, 6 ) );
+			temp.getInventory( ).addItem( new ItemStack( Material.LADDER, 10 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
 			temp.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );

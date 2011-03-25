@@ -77,6 +77,7 @@ public class FAPlayerListener
 			
 			player.getInventory( ).addItem( new ItemStack( Material.WOOD_PICKAXE, 1 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.TNT, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.LADDER, 5 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
