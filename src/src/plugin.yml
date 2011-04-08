@@ -1,6 +1,6 @@
 name: FortressAssault
 main: ssell.FortressAssault.FortressAssault
-version: "1.1.0"
+version: "1.2.0"
 commands:
     faStart:
         description: Starts the event.
@@ -20,3 +20,9 @@ commands:
     faTime:
         description: Sets time limit before the Assault.
         usage: /<command>
+    faTeams:
+        description: Shows the current players/teams.
+        usage: /<command>     
+    faReturn:
+        description: Returns a players inventory if they were dead when game ended.
+        usage: /<command>     
