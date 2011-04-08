@@ -6,9 +6,9 @@ import java.util.List;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.entity.Player;
-
 import ssell.FortressAssault.FortressAssault;
+import ssell.FortressAssault.FortressAssault.FAPlayer;
+import ssell.FortressAssault.FortressAssault.Team;
 
 //------------------------------------------------------------------------------------------
 
@@ -18,12 +18,12 @@ public class FAGizmoHandler
 	
 	public class FAGizmo
 	{
-		public String team;
+		public Team team;
 		public Block block;
-		public String destroyer;
+		public FAPlayer destroyer;
 		public boolean destructing;
 		
-		public FAGizmo( String p_Team, Block p_Block )
+		public FAGizmo( Team p_Team, Block p_Block )
 		{
 			team = p_Team;
 			block = p_Block;
@@ -46,31 +46,20 @@ public class FAGizmoHandler
 		plugin = instance;
 	}
 	
-	public boolean addGizmo( Player player, Block block )
-	{
-		FAGizmo gizmo = new FAGizmo( plugin.getTeam( player ), block );
+	public boolean addGizmo( FAPlayer thisPlayer, Block block )
+	{		
+		FAGizmo gizmo = new FAGizmo( thisPlayer.team, block );
 		
 		for( int i = 0; i < gizmoList.size( ); i++ )
 		{
 			if( gizmoList.get( i ).team.equals( gizmo.team ) )
 			{
-				player.sendMessage( ChatColor.DARK_RED + "There is already a Gizmo for your team!" );
+				thisPlayer.player.sendMessage( ChatColor.DARK_RED + "There is already a Gizmo for your team!" );
 
 				return false;
 			}
 		}
-		
-		if( plugin.getTeam( player ).equals( "BLUE" ) )
-		{
-			plugin.getServer( ).broadcastMessage( ChatColor.BLUE + "Blue Team has placed " +
-					"their Gizmo!" );
-		}
-		else
-		{
-			plugin.getServer( ).broadcastMessage( ChatColor.RED + "Red Team has placed " +
-			"their Gizmo!" );
-		}
-		
+		plugin.getServer( ).broadcastMessage( plugin.getTeamColor(thisPlayer.team) + thisPlayer.team.toString()+" Team has placed their Gizmo!" );
 		gizmoList.add( gizmo );
 		
 		return true;
@@ -88,7 +77,7 @@ public class FAGizmoHandler
 		}
 	}
 	
-	public String getPlacedGizmoTeam( )
+	public Team getPlacedGizmoTeam( )
 	{
 		if( gizmoList.size( ) != 0 )
 		{
@@ -111,7 +100,7 @@ public class FAGizmoHandler
 		return false;
 	}
 	
-	public void gizmoHit( Player player, Block block )
+	public void gizmoHit( FAPlayer player, Block block )
 	{
 		FAGizmo gizmo = null;
 		
@@ -126,7 +115,7 @@ public class FAGizmoHandler
 		}
 		
 		//Has the gizmo been hit by a player on its team?
-		if( plugin.getTeam( player ).equals( gizmo.team ) )
+		if( player.team.equals( gizmo.team ) )
 		{
 			//Same team
 			//is the gizmo being saved from destructing?
@@ -135,37 +124,18 @@ public class FAGizmoHandler
 				gizmo.destroyer = null;
 				gizmo.destructing = false;
 				
-				if( plugin.getTeam( player ).equals( "BLUE" ) )
-				{
-					plugin.getServer( ).broadcastMessage( ChatColor.BLUE +
-							player.getDisplayName( ) + " saved the Blue Gizmo!" );
-				}
-				else
-				{
-					plugin.getServer( ).broadcastMessage( ChatColor.RED +
-							player.getDisplayName( ) + " saved the Red Gizmo!" );
-				}
+				plugin.getServer( ).broadcastMessage( plugin.getTeamColor(player.team) + player.name + " saved the "+player.team.toString()+" Gizmo!" );
 			}
-			//else do nothing
 		}
 		else
 		{
 			//Opposing team
 			if( !gizmo.destructing )
 			{
-				gizmo.destroyer = player.getDisplayName( );
+				gizmo.destroyer = player;
 				gizmo.destructing = true;
 				
-				if( plugin.getTeam( player ).equals( "BLUE" ) )
-				{
-					plugin.getServer( ).broadcastMessage( ChatColor.RED +
-							player.getDisplayName( ) + " attacked the Red Gizmo!" );
-				}
-				else
-				{
-					plugin.getServer( ).broadcastMessage( ChatColor.BLUE +
-							player.getDisplayName( ) + " attacked the Blue Gizmo!" );
-				}
+				plugin.getServer( ).broadcastMessage( plugin.getTeamColor(player.team) + player.name + " attacked the "+gizmo.team.toString()+" Gizmo!" );
 				
 				final FAGizmo finalGizmo = gizmo;
 				
@@ -194,17 +164,9 @@ public class FAGizmoHandler
 					gizmoList.get( i ).destructing = false;
 				}
 			}
+			FAPlayer thisPlayer = getDestroyer();
 			
-			if( gizmo.team.equals( "BLUE" ) )
-			{
-				plugin.getServer( ).broadcastMessage( ChatColor.RED + "Red Team " + 
-						ChatColor.GOLD + "wins!" );
-			}
-			else
-			{
-				plugin.getServer( ).broadcastMessage( ChatColor.BLUE + "Blue Team " + 
-						ChatColor.GOLD + "wins!" );
-			}
+			plugin.getServer( ).broadcastMessage( plugin.getTeamColor(thisPlayer.team) + thisPlayer.team.toString()+" Team " +	ChatColor.GOLD + "wins!" );
 			
 			//Game is over.
 			plugin.gameOver( );	
@@ -221,7 +183,7 @@ public class FAGizmoHandler
 		gizmoList.clear( );
 	}
 	
-	public String getDestroyer( )
+	public FAPlayer getDestroyer( )
 	{
 		for( int i = 0; i < gizmoList.size( ); i++ )
 		{

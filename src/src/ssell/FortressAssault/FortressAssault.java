@@ -3,13 +3,16 @@ package ssell.FortressAssault;
 //------------------------------------------------------------------------------------------
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Logger;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.inventory.ItemStack;
@@ -17,6 +20,8 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.PluginManager;
 
+//import ssell.FortressAssault.FAPvPWatcher.FAPlayer;
+//import ssell.FortressAssault.FortressAssault.Team;
 //------------------------------------------------------------------------------------------
 
 /**
@@ -29,6 +34,42 @@ import org.bukkit.plugin.PluginManager;
 public class FortressAssault
 	extends JavaPlugin
 {
+	public enum Team { NONE, RED, BLUE, HUMAN, ZOMBIE }
+	public enum Class { NONE, SCOUT, DEMOMAN, ENGINEER }
+	public final class FAPlayer implements Comparable<Object>
+	{
+		public String name;
+		public Player player;
+		public Team team;
+		public Class classtype;
+		public int kills;
+		public int deaths;
+		public int destructions;
+		public World world;
+		public boolean dead;
+
+		public FAPlayer( Player p_Player )
+		{
+			name = p_Player.getDisplayName( );
+			player = p_Player;
+			team = Team.NONE;
+			classtype = Class.NONE;
+			kills = 0;
+			deaths = 0;
+			destructions = 0;
+			world = p_Player.getWorld();
+			if (p_Player.getHealth() < 0 ) {
+				dead = true;
+			} else {
+				dead = false;
+			}
+		}
+
+		@Override
+		public int compareTo(Object anotherPlayer) {
+			return this.kills - ((FAPlayer) anotherPlayer).kills;
+		}
+	}
 	//Objects
 	
 	private static final Logger log = Logger.getLogger( "Minecraft" );
@@ -41,15 +82,11 @@ public class FortressAssault
 	private final FAPlayerListener playerListener = new FAPlayerListener( this, entityListener );
 	
 	private int resources = 2;			//Default resource level (normal)
-	private int timeLimit = 5;			//Default time limit to build
+	private int timeLimit = 1;			//Default time limit to build
 	
-	private final List< Player > blueTeam = new ArrayList< Player >( );
-	private final List< Player > redTeam = new ArrayList< Player >( );
-	private final List< String > blueStrList = new ArrayList< String >( );
-	private final List< String > redStrList = new ArrayList< String >( );
+	public List< FAPlayer > playerList = new ArrayList< FAPlayer >( );
 	
-	private boolean fortify = false;
-	private boolean assault = false;
+	public int phase = 0;
 	
 	private List< JavaPair< String, List< ItemStack > > > inventoryList = new ArrayList< JavaPair< String, List< ItemStack > > >( );
 	
@@ -73,16 +110,22 @@ public class FortressAssault
 		PluginManager pluginMgr = getServer( ).getPluginManager( );
 		
 		//Register for events
-		pluginMgr.registerEvent( Event.Type.BLOCK_DAMAGED, blockListener, 
+		pluginMgr.registerEvent( Event.Type.BLOCK_DAMAGE, blockListener, 
 				                 Event.Priority.High, this );
-		pluginMgr.registerEvent( Event.Type.BLOCK_PLACED, blockListener,
+		pluginMgr.registerEvent( Event.Type.BLOCK_PLACE, blockListener,
 				                 Event.Priority.Normal, this );
-		pluginMgr.registerEvent( Event.Type.ENTITY_DAMAGED, entityListener,
+		pluginMgr.registerEvent( Event.Type.ENTITY_DAMAGE, entityListener,
 								 Event.Priority.Normal, this );
+		pluginMgr.registerEvent( Event.Type.ENTITY_DEATH, entityListener,
+				 				 Event.Priority.Normal, this );
 		pluginMgr.registerEvent( Event.Type.PLAYER_RESPAWN, playerListener,
 								 Event.Priority.Normal, this );
+		pluginMgr.registerEvent( Event.Type.PLAYER_QUIT, playerListener,
+				 				 Event.Priority.Normal, this );
+		pluginMgr.registerEvent( Event.Type.PLAYER_JOIN, playerListener,
+				 Event.Priority.Normal, this );
 		
-		log.info( "Fortress Assault v1.1.0 is enabled!" );
+		log.info( "Fortress Assault v1.2.0 is enabled!" );
 	}
 	
 	/**
@@ -96,47 +139,95 @@ public class FortressAssault
 	        
 		if ( sender instanceof Player ) 
 		{
-			if( commandName.equals( "fastart" ) )
+			if( commandName.equalsIgnoreCase("fastart" ) )
 			{
 				startEvent( ( Player )sender );
 				
 				return true;
 			}
-			else if( commandName.equals( "fastop" ) )
+			else if( commandName.equalsIgnoreCase( "fastop" ) )
 			{
 				stopEvent( ( Player )sender );
 				
 				return true;
 			}
-			else if( commandName.equals( "faadd" ) )
+			else if( commandName.equalsIgnoreCase( "faadd" ) )
 			{
-				if( split.length == 0 )
-				{
-					sender.sendMessage( ChatColor.DARK_RED + "Invalid format! " +
-							            "'/faAdd TEAMCOLOR PLAYER' BLUE or RED only." );
+				Player thePlayer = ( Player )sender;
+				int bluecount = getTeamCount(Team.BLUE);
+				int redcount = getTeamCount(Team.RED);
+				String nextTeam = "RED";
+				if (redcount>bluecount) {
+					nextTeam = "BLUE";
 				}
-				else
+				if( split.length == 0 )
+				{				
+					addPlayer( ( Player )sender, nextTeam, thePlayer.getDisplayName() );
+				}
+				else if (split.length == 1)
+				{					
+					addPlayer( ( Player )sender, nextTeam, split[ 0 ] );
+				}
+				else if (split.length == 2)
 				{
 					addPlayer( ( Player )sender, split[ 0 ], split[ 1 ] );
 				}
 				
 				return true;
 			}
-			else if( commandName.equals( "faresource" ) )
+			else if( commandName.equalsIgnoreCase( "faresource" ) )
 			{
 				setResources( ( Player )sender, split[ 0 ] );
 				
 				return true;
 			}
-			else if( commandName.equals( "fatime" ) )
+			else if( commandName.equalsIgnoreCase( "fatime" ) )
 			{
 				setTime( ( Player )sender, split[ 0 ] );
 				
 				return true;
 			}
+			else if( commandName.equalsIgnoreCase( "fateams" ) )
+			{
+				showScore(( Player )sender);
+			}
+			else if( commandName.equalsIgnoreCase( "fareturn" ) )
+			{
+				if (phase == 0) {
+					returnInventory(( Player )sender);
+				}
+			}
 		}
 		
 		return false;
+	}
+	public int getTeamCount(Team theTeam) {
+		int count = 0;
+		for (int x=0;x<playerList.size();x++) {
+			FAPlayer thisPlayer = playerList.get(x);
+			if (thisPlayer != null) {
+				if (thisPlayer.team == theTeam) {
+					count++;
+				}
+			}
+		}
+		return count;
+	}
+	public void showScore(Player player) {
+		player.sendMessage( ChatColor.YELLOW + "# Name | Kills | Deaths | Destructions");
+		Collections.sort(playerList);
+		for (int x=0;x<playerList.size();x++) {
+			FAPlayer thisPlayer = playerList.get(x);
+			ChatColor color = getTeamColor(thisPlayer.team);
+			String sep = ChatColor.YELLOW + " | " + color;
+			player.sendMessage( color + thisPlayer.name + sep + Integer.toString(thisPlayer.kills)+ sep + Integer.toString(thisPlayer.deaths) + sep +Integer.toString(thisPlayer.destructions));					
+		}								
+	}
+	public void showScoreAll() {
+		for (int x=0;x<playerList.size();x++) {
+			FAPlayer thisPlayer = playerList.get(x);
+			showScore(thisPlayer.player);
+		}
 	}
 	
 	/**
@@ -224,55 +315,95 @@ public class FortressAssault
 	 */
 	public void addPlayer( Player sender, String team, String toAdd )
 	{
-		//Valid team color
-		if( team.equalsIgnoreCase( "blue" ) || team.equalsIgnoreCase( "red" ) )
+		Player tempPlayer = getServer( ).getPlayer( toAdd );
+		
+		//Valid player
+		if( tempPlayer != null )
 		{
-			Player tempPlayer = getServer( ).getPlayer( toAdd );
-			
-			//Valid player
-			if( tempPlayer != null )
+			//Player not already on a team
+			Team thisteam;
+			if( getFAPlayer(tempPlayer) == null )
 			{
-				//Player not already on a team
-				if( getTeam( tempPlayer ) == null )
-				{
-					if( team.equalsIgnoreCase( "BLUE" ) )
-					{
-						blueTeam.add( tempPlayer );
-						blueStrList.add( toAdd );
-							
-						getServer( ).broadcastMessage( ChatColor.BLUE + toAdd + " added to Blue Team!" );
-					}
-					else
-					{
-						redTeam.add( tempPlayer );
-						redStrList.add( toAdd );
-							
-						getServer( ).broadcastMessage( ChatColor.RED + toAdd + " added to Red Team!" );
-					}
+				FAPlayer newPlayer = new FAPlayer( tempPlayer );
+				try {
+					thisteam = Team.valueOf(team.toUpperCase());
+				} catch(IllegalArgumentException e) {
+					getServer( ).broadcastMessage( ChatColor.DARK_RED+"That is not a valid team!");
+					return;
 				}
-				else
-				{
-					if( getTeam( tempPlayer ).equalsIgnoreCase( "BLUE" ) )
-					{
-						sender.sendMessage( ChatColor.DARK_RED + "That player is already on the " +
-						ChatColor.BLUE + "Blue Team" + ChatColor.DARK_RED + "!" );
-					}
-					else if( getTeam( tempPlayer ).equalsIgnoreCase( "RED" ) )
-					{
-						sender.sendMessage( ChatColor.DARK_RED + "That player is already on the " +
-						ChatColor.RED + "Red Team" + ChatColor.DARK_RED + "!" );
-					}
-				}
+				newPlayer.team = thisteam;
+				playerList.add(newPlayer);						
+				getServer( ).broadcastMessage( getTeamColor(thisteam) + newPlayer.name + " added to "+thisteam.toString()+" Team!" );
 			}
 			else
 			{
-				sender.sendMessage( ChatColor.DARK_RED + "Player not found!" );
+				FAPlayer thisPlayer = getFAPlayer(tempPlayer);
+				try {
+					thisteam = Team.valueOf(team.toUpperCase());
+				} catch(IllegalArgumentException e) {
+					getServer( ).broadcastMessage( ChatColor.DARK_RED+"That is not a valid team!");
+					return;
+				}
+				thisPlayer.team = thisteam;
+				getServer( ).broadcastMessage( ChatColor.YELLOW + toAdd + " changed to "+thisteam.toString()+" Team!" );
 			}
 		}
 		else
 		{
-			sender.sendMessage( ChatColor.DARK_RED + "Invalid team. Must choose BLUE or RED" );
+			sender.sendMessage( ChatColor.DARK_RED + "Player not found!" );
 		}
+	}
+	public ChatColor getTeamColor(Team team) {
+		ChatColor teamColor = ChatColor.YELLOW;
+		switch(team) {
+		case BLUE:
+			teamColor = ChatColor.BLUE;
+			break;
+		case RED:
+			teamColor = ChatColor.RED;
+			break;
+		case ZOMBIE:
+			teamColor = ChatColor.GREEN;
+			break;
+		case HUMAN:
+			teamColor = ChatColor.AQUA;
+			break;			
+		}		
+		return teamColor;
+	}
+	
+	/**
+	 * Get the game player object<br>
+	 * 
+	 * @param player the bukkit Player.
+	 * @param entity the bukkit Entity.
+	 * 
+	 */
+	public FAPlayer getFAPlayer(Player player) {
+		for (int x=0;x<playerList.size();x++) {
+			FAPlayer thisPlayer = playerList.get(x);
+			try {
+				if (thisPlayer.name.equalsIgnoreCase(player.getDisplayName())) {	
+					if (thisPlayer.player.getEntityId() != player.getEntityId()) {				
+						//fix player reference in case they reconnected.
+						thisPlayer.player = player;					
+					}	
+					return thisPlayer;
+				}
+			} catch(NullPointerException e) {
+				continue;
+			}
+		}
+		return null;
+	}
+	public FAPlayer getFAPlayer(Entity entity) {
+		for (int x=0;x<playerList.size();x++) {
+			FAPlayer thisPlayer = playerList.get(x);
+			if (thisPlayer.player.getEntityId()==entity.getEntityId()) {	
+				return thisPlayer;
+			}
+		}
+		return null;
 	}
 	
 	/**
@@ -282,27 +413,20 @@ public class FortressAssault
 	public void stopEvent( Player sender )
 	{
 		//Either phase is occuring
-		if( ( fortify == true ) || ( assault == true ) )
+		if(phase != 0)
 		{
 			//If the sender is part of the game
-			if( getTeam( sender ) != null )
+			FAPlayer thisPlayer = getFAPlayer(sender);
+			if( thisPlayer != null )
 			{
-				getServer( ).broadcastMessage( ChatColor.YELLOW + sender.getDisplayName( ) +
-						" has stopped the current game of Fortress Assault." );
-				
+				getServer( ).broadcastMessage( ChatColor.YELLOW + thisPlayer.name +	" has stopped the current game of Fortress Assault." );				
 				getServer( ).getScheduler( ).cancelTasks( this );
 				
-				fortify = false;
-				assault = false;
+				phase = 0;
 				
-				pvpWatcher.clear( );
-				
-				gizmoHandler.clearList( );
-				
-				entityListener.pvpListen( false );
-				blockListener.setPhase( false, false );
-				
-				returnInventory( null );
+				gizmoHandler.clearList( );			
+				giveGameItems();
+				returnInventory();
 			}
 			else
 			{
@@ -327,49 +451,38 @@ public class FortressAssault
 	 */
 	public boolean startEvent( Player sender )
 	{
-		if( ( fortify == true ) || ( assault == true ) )
+		if( phase != 0 )
 		{
 			sender.sendMessage( ChatColor.DARK_RED + "You cannot start a game when one is already occuring!" );
 			
 			return false;
 		}
 		else
-		{
-			fortify = true;
-			assault = false;
-			
-			getServer( ).broadcastMessage( ChatColor.YELLOW + "Start Fortifying!" );
-			
+		{		
 			//Want to warn about each separate team
-			if( blueTeam.size( ) == 0 )
+			if( playerList.size( ) == 0 )
 			{
-				sender.sendMessage( ChatColor.DARK_RED + "Blue Team needs atleast one member!" );
-			}
-			
-			if( redTeam.size( ) == 0 )
-			{
-				sender.sendMessage( ChatColor.DARK_RED + "Red Team needs atleast one member!" );
-			}
-			
-			//If either of the teams were not ready, go no further.
-			if( ( redTeam.size( ) == 0 ) || ( blueTeam.size( ) == 0 ) )
-			{
+				sender.sendMessage( ChatColor.DARK_RED + "You don't have any players" );
 				return false;
 			}
+			
+			phase = 1;
+			
+			getServer( ).broadcastMessage( ChatColor.YELLOW + "Start Fortifying!" );
 			
 			//So the teams each have at least one member.
 			//Send a warning message if the teams are unbalanced but don't do anything about it.
 			
+			/*
 			if( blueTeam.size( ) != redTeam.size( ) )
 			{
 				sender.sendMessage( ChatColor.YELLOW + "Warning! Teams unbalanced. /faStop if you want to correct this" );
 			}
-			
-			//Replace the inventories and turn God mode on
+			*/
+			resetScoreboard();
+			cleanUpPlayerList();
 			replaceInventoriesFortify( );
-			setGodMode( true );
 			
-			blockListener.setPhase( true, false );
 			
 			//----------------------------------------------------------------------------------
 			// Set up the counters
@@ -446,33 +559,116 @@ public class FortressAssault
 	public void timeWarningSeconds( int timeLeft )
 	{
 		getServer( ).broadcastMessage( ChatColor.YELLOW + "" + timeLeft + " seconds remaining!" );
+	}	
+	@SuppressWarnings("deprecation")
+	public void storeInventory(FAPlayer thisPlayer) {
+		boolean storedAnItem = false;
+		Player player = thisPlayer.player;
+		player = getServer( ).getPlayer( player.getDisplayName( ) );
+		//make sure they don't already have stuff stored.
+		returnInventory(player);
+		//Stash inventories	
+		List< ItemStack > newList = new ArrayList< ItemStack >( );
+		
+		for( int j = 0; j < 36; j++ )
+		{
+			ItemStack thisStack = thisPlayer.player.getInventory( ).getItem( j );
+			if( thisStack != null )
+			{
+				//don't store air, game doesn't like that.
+				if (thisStack.getType() != Material.AIR) {
+					newList.add( thisPlayer.player.getInventory( ).getItem( j ) );
+					storedAnItem = true;
+				}
+			}
+		}
+		if (storedAnItem) {
+			player.sendMessage( ChatColor.YELLOW + "Storing your inventory. You will get it back after the event." );
+			inventoryList.add( new JavaPair< String, List< ItemStack > >( thisPlayer.name, newList ) );
+			player.getInventory( ).clear();
+			//DEPRECATED. need to find alternative
+			player.updateInventory( );
+		}
+	}
+	public void resetScoreboard() 
+	{
+		for (int i=0;i<playerList.size();i++) {
+			FAPlayer thisPlayer = playerList.get(i);
+			thisPlayer.kills = 0;
+			thisPlayer.deaths = 0;
+			thisPlayer.destructions = 0;
+		}
 	}
 	
+	
 	/**
-	 * Turns god mode on or off.<br><br>
-	 * This is enabled during the fortify phase, and then disabled during assault.
-	 * @param enabled
-	 */
-	public void setGodMode( boolean enabled )
+	 * Give the players the items they need for the current phase
+	 * 
+	 * @param player
+	 */	
+
+	public void giveGameItems() 
 	{
-		if( enabled )
-		{
-			for( int i = 0; i < blueTeam.size( ); i++ )
-			{
-				entityListener.addToList( blueTeam.get( i ) );		
+		for (int i=0;i<playerList.size();i++) {
+			giveGameItems(playerList.get(i).player);
+		}
+	}	
+	@SuppressWarnings("deprecation")
+	public void giveGameItems(Player player) {
+		if (player == null) {
+			return;
+		}
+		//make sure entity is correct
+		player = getServer( ).getPlayer( player.getDisplayName( ) );
+		FAPlayer thisPlayer = getFAPlayer(player);	
+		if (thisPlayer == null) {
+			return;
+		}
+		switch (phase) {
+		//game not running
+		case 0:
+			player.getInventory( ).clear( );
+			break;
+		//fortify phase
+		case 1:
+			player.getInventory( ).clear( );
+		
+			player.getInventory( ).addItem( new ItemStack( Material.OBSIDIAN, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_AXE, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_SPADE, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.STONE, ( resources * 64 ) ) );
+			player.getInventory( ).addItem( new ItemStack( Material.COBBLESTONE, ( resources * 3 * 64 ) ) );
+			player.getInventory( ).addItem( new ItemStack( Material.WOOD, ( int )( resources * 0.5 * 64 ) ) );
+			player.getInventory( ).addItem( new ItemStack( Material.TORCH, 64 ) );
+			break;
+		//attack phase
+		case 2:
+			player.getInventory( ).clear( );
+			
+			if (thisPlayer.team == Team.BLUE || thisPlayer.team == Team.ZOMBIE) {
+				player.getInventory( ).setHelmet( new ItemStack( Material.CHAINMAIL_HELMET, 1 ) );
+				player.getInventory( ).setChestplate( new ItemStack( Material.CHAINMAIL_CHESTPLATE, 1 ) );
+				player.getInventory( ).setLeggings( new ItemStack( Material.CHAINMAIL_LEGGINGS, 1 ) );
+				player.getInventory( ).setBoots( new ItemStack( Material.CHAINMAIL_BOOTS, 1 ) );
+			} else {
+				player.getInventory( ).setHelmet( new ItemStack( Material.GOLD_HELMET, 1 ) );
+				player.getInventory( ).setChestplate( new ItemStack( Material.GOLD_CHESTPLATE, 1 ) );
+				player.getInventory( ).setLeggings( new ItemStack( Material.GOLD_LEGGINGS, 1 ) );
+				player.getInventory( ).setBoots( new ItemStack( Material.GOLD_BOOTS, 1 ) );				
 			}
 			
-			for( int i = 0; i < redTeam.size( ); i++ )
-			{
-				entityListener.addToList( redTeam.get( i ) );
-			}
+			player.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.TNT, 3 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.LADDER, 6 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
+			player.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
+			break;
 		}
-		else
-		{
-			entityListener.clearList( );
-		}
-		
-		entityListener.setGod( enabled );
+		//DEPRECATED. need to find alternative
+		player.updateInventory( );
 	}
 	
 	/**
@@ -482,68 +678,14 @@ public class FortressAssault
 	 */
 	private void replaceInventoriesFortify( )
 	{
-		for( int i = 0; i < blueTeam.size( ); i++ )
+		for( int i = 0; i < playerList.size( ); i++ )
 		{
-			Player temp = blueTeam.get( i );
-			
-			temp.sendMessage( ChatColor.YELLOW + "Replacing your inventory. You will get it back after the event." );
-			
-			//Stash inventories	
-			List< ItemStack > newList = new ArrayList< ItemStack >( );
-			
-			for( int j = 0; j < 36; j++ )
-			{
-				if( temp.getInventory( ).getItem( j ) != null )
-				{
-					newList.add( temp.getInventory( ).getItem( j ) );
-				}
+			FAPlayer thisPlayer = playerList.get(i);			
+			if (thisPlayer != null) {
+				storeInventory(thisPlayer);
+				giveGameItems(thisPlayer.player);
 			}
-			
-			inventoryList.add( new JavaPair< String, List< ItemStack > >( temp.getDisplayName( ), newList ) );
-			
-			//Clear and replace
-			temp.getInventory( ).clear( );
-			
-			temp.getInventory( ).addItem( new ItemStack( Material.SPONGE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_AXE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SPADE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.STONE, ( resources * 64 ) ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.COBBLESTONE, ( resources * 3 * 64 ) ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.WOOD, ( int )( resources * 0.5 * 64 ) ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.TORCH, 64 ) );
-		}
-		
-		for( int i = 0; i < redTeam.size( ); i++ )
-		{
-			Player temp = redTeam.get( i );
-			
-			temp.sendMessage( ChatColor.YELLOW + "Replacing your inventory. You will get it back after the event." );
-			
-			//Stash inventories	
-			List< ItemStack > newList = new ArrayList< ItemStack >( );
-			
-			for( int j = 0; j < 36; j++ )
-			{
-				if( temp.getInventory( ).getItem( j ) != null )
-				{
-					newList.add( temp.getInventory( ).getItem( j ) );
-				}
-			}
-			
-			inventoryList.add( new JavaPair< String, List< ItemStack > >( temp.getDisplayName( ), newList ) );
-			
-			//Clear and replace
-			temp.getInventory( ).clear( );
-			
-			temp.getInventory( ).addItem( new ItemStack( Material.SPONGE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_AXE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SPADE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.STONE, ( resources * 64 ) ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.COBBLESTONE, ( resources * 3 * 64 ) ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.WOOD, ( int )( resources * 0.5 * 64 ) ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.TORCH, 64 ) );
+
 		}
 	}
 	
@@ -552,44 +694,12 @@ public class FortressAssault
 	 */
 	private void replaceInventoriesAssault( )
 	{
-		for( int i = 0; i < blueTeam.size( ); i++ )
+		for( int i = 0; i < playerList.size( ); i++ )
 		{
-			Player temp = blueTeam.get( i );
-			
-			temp.getInventory( ).clear( );
-			
-			temp.getInventory( ).setHelmet( new ItemStack( Material.IRON_HELMET, 1 ) );
-			temp.getInventory( ).setChestplate( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
-			temp.getInventory( ).setLeggings( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
-			temp.getInventory( ).setBoots( new ItemStack( Material.IRON_BOOTS, 1 ) );
-			
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.TNT, 3 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.LADDER, 6 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
-		}
-		
-		for( int i = 0; i < redTeam.size( ); i++ )
-		{
-			Player temp = redTeam.get( i );
-			
-			temp.getInventory( ).clear( );
-			
-			temp.getInventory( ).setHelmet( new ItemStack( Material.IRON_HELMET, 1 ) );
-			temp.getInventory( ).setChestplate( new ItemStack( Material.IRON_CHESTPLATE, 1 ) );
-			temp.getInventory( ).setLeggings( new ItemStack( Material.IRON_LEGGINGS, 1 ) );
-			temp.getInventory( ).setBoots( new ItemStack( Material.IRON_BOOTS, 1 ) );
-			
-			temp.getInventory( ).addItem( new ItemStack( Material.IRON_SWORD, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.STONE_PICKAXE, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.TNT, 3 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.LADDER, 10 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.MUSHROOM_SOUP, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.COOKED_FISH, 1 ) );
-			temp.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
+			FAPlayer thisPlayer = playerList.get(i);
+			if (thisPlayer != null) {
+				giveGameItems(thisPlayer.player);
+			}			
 		}
 	}
 	
@@ -598,8 +708,7 @@ public class FortressAssault
 	 */
 	private void beginAssault( )
 	{
-		fortify = false;
-		assault = true;
+		phase = 2;
 		
 		//Make sure both teams have placed their gizmos
 		if( gizmoHandler.gizmosPlaced( ) )
@@ -607,137 +716,59 @@ public class FortressAssault
 			getServer( ).broadcastMessage( ChatColor.DARK_RED + "Begin your assault!" );
 			
 			replaceInventoriesAssault( );
-			setGodMode( false );
 			
-			entityListener.pvpListen( true );
-			blockListener.setPhase( false, true );
 		}
 		else
 		{
 			noGizmoGameOver( );
 		}
-	}
-	
-	/**
-	 * Returns which team the specified player is on.
-	 * 
-	 * @param player
-	 * @return
-	 */
-	public String getTeam( Player player )
-	{
-		for( int i = 0; i < blueTeam.size( ); i++ )
-		{
-			if( blueTeam.get( i ).getDisplayName( ).equalsIgnoreCase( player.getDisplayName( ) ) )
-			{
-				return "BLUE";
-			}
-		}
+	}	
 		
-		for( int i = 0; i < redTeam.size( ); i++ )
-		{
-			if( redTeam.get( i ).getDisplayName( ).equalsIgnoreCase( player.getDisplayName( ) ) )
-			{
-				return "RED";
-			}
-		}
-		
-		return null;
-	}
-	
-	/**
-	 * Returns the list of players for the specified team.
-	 * 
-	 * @param blue True if want blue list, False if red list.
-	 * @return
-	 */
-	public List< Player > getTeamList( boolean blue )
-	{
-		if( blue )
-		{
-			return blueTeam;
-		}
-		
-		return redTeam;
-	}
-	/**
-	 * Returns the list containing the player names.
-	 * 
-	 * @param blue True if want blue list, False if red list.
-	 * @return
-	 */
-	public List< String > getStrList( boolean blue )
-	{
-		if( blue )
-		{
-			return blueStrList;
-		}
-		
-		return redStrList;
-	}
-	
 	/**
 	 * The game ended under normal conditions.<br>
 	 * Prints the results and resets the mod.
 	 */
 	public void gameOver( )
 	{
-		getServer( ).getScheduler( ).cancelTasks( this );
-		
-		fortify = false;
-		assault = false;
-		
-		pvpWatcher.printResults( gizmoHandler.getDestroyer( ) );
-		pvpWatcher.clear( );
-		
-		blueTeam.clear( );
-		redTeam.clear( );
-		
-		returnInventory( null );
-		
-		entityListener.pvpListen( false );
-		blockListener.setPhase( false, false );
-		
-		returnInventory( null );
+		getServer( ).getScheduler( ).cancelTasks( this );		
+		phase = 0;		
+		showScoreAll();
+		giveGameItems();
+		returnInventory();
+		gizmoHandler.clearList( );		
 	}	
-	
+		
 	/**
 	 * If one of the teams did not place their Gizmo, then the game is over.<br>
 	 * The team that did place a Gizmo is declared the winner.
 	 */
 	public void noGizmoGameOver( )
 	{
-		if( gizmoHandler.getPlacedGizmoTeam( ).equalsIgnoreCase( "BLUE" ) )
-		{
-			getServer( ).broadcastMessage( ChatColor.BLUE + "Blue Team " +
-					ChatColor.GOLD + "wins! Other team did not place a Gizmo!" );
-		}
-		else if( gizmoHandler.getPlacedGizmoTeam( ).equalsIgnoreCase( "RED" ) )
-		{
-			getServer( ).broadcastMessage( ChatColor.RED + "Red Team " +
-					ChatColor.GOLD + "wins! Other team did not place a Gizmo!" );
-		}
-		else
-		{
+		//getTeamColor
+		Team gizmoTeam = gizmoHandler.getPlacedGizmoTeam();
+		if (gizmoTeam != null) {
+			getServer( ).broadcastMessage( getTeamColor(gizmoTeam) + gizmoTeam.toString()+" Team " + ChatColor.GOLD + "wins! Other team did not place a Gizmo!" );
+		} else {
 			getServer( ).broadcastMessage( ChatColor.GOLD + "Neither team placed a Gizmo! No winners." );
 		}
 		
 		getServer( ).getScheduler( ).cancelTasks( this );
 		
-		fortify = false;
-		assault = false;
-		
-		pvpWatcher.clear( );
-		
-		blueTeam.clear( );
-		redTeam.clear( );
-		
-		gizmoHandler.clearList( );
-		
-		entityListener.pvpListen( false );
-		blockListener.setPhase( false, false );
-		
-		returnInventory( null );
+		phase = 0;
+		giveGameItems();
+		returnInventory();
+		gizmoHandler.clearList( );						
+	}
+
+	public void cleanUpPlayerList()
+	{
+		for (int i=0;i<playerList.size();i++) {
+			FAPlayer thisPlayer = playerList.get(i);
+			if (thisPlayer.player.isOnline() == false) {
+				getServer( ).broadcastMessage( ChatColor.DARK_RED + "Removing offline player "+ thisPlayer.name );
+				playerList.remove(i);
+			}
+		}
 	}
 	
 	/**
@@ -746,14 +777,31 @@ public class FortressAssault
 	 * 
 	 * @param player Specific player, or null for all.
 	 */
+	
+	public void returnInventory() 
+	{
+		for (int i=0;i<playerList.size();i++) {
+			returnInventory(playerList.get(i).player);
+		}
+	}
+	@SuppressWarnings("deprecation")
 	public void returnInventory( Player player )
 	{
 		if( player != null )
 		{
+			player = getServer( ).getPlayer( player.getDisplayName( ) );
 			for( int i = 0; i < inventoryList.size( ); i++ )
 			{
-				if( inventoryList.get( i ).first.equalsIgnoreCase( player.getDisplayName( ) ) )
+				if( inventoryList.get( i ).first.equalsIgnoreCase( player.getDisplayName() ) )
 				{	
+					FAPlayer thisPlayer = getFAPlayer(player);
+					if (thisPlayer != null) {
+						if (thisPlayer.dead) {
+							player.sendMessage( ChatColor.YELLOW + "You were dead when game ended use /faReturn to get your inventory back when your alive." );
+							//player is dead so don't give them inventory now.
+							continue;
+						}
+					}
 					//Stashed inventory found.
 					List< ItemStack > oldInventory = inventoryList.get( i ).second;
 					
@@ -765,7 +813,11 @@ public class FortressAssault
 						
 						for( int j = 0; j < oldInventory.size( ); j++ )
 						{
-							newInventory.addItem( oldInventory.get( j ) );
+							ItemStack thisStack = oldInventory.get( j );
+							if (thisStack != null ) {
+								//give player itemstack
+								newInventory.addItem( thisStack );
+							}
 						}
 						
 						inventoryList.remove( i );
@@ -777,41 +829,6 @@ public class FortressAssault
 					break;
 				}
 			}
-		}
-		else
-		{
-			
-			for( int i = 0; i < inventoryList.size( ); i++ )
-			{
-				Player tempPlayer = getServer( ).getPlayer( inventoryList.get( i ).first );
-				
-				//Stashed inventory found.
-				List< ItemStack > oldInventory = inventoryList.get( i ).second;
-				
-				if( ( oldInventory != null ) && ( tempPlayer != null ) )
-				{
-					PlayerInventory newInventory = tempPlayer.getInventory( );
-					
-					newInventory.clear( );
-					
-					//Add old items into the inventory
-					for( int j = 0; j < oldInventory.size( ); j++ )
-					{
-						if( oldInventory.get( j ) != null )
-						{
-							if( oldInventory.get( j ).getType( ) != Material.AIR )
-							{
-								newInventory.addItem( oldInventory.get( j ) );
-							}
-						}
-					}
-					
-					//DEPRECATED. need to find alternative
-					tempPlayer.updateInventory( );
-				}
-			}
-			
-			inventoryList.clear( );
 		}
 	}
 }
