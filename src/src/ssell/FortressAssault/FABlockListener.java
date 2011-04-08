@@ -10,6 +10,7 @@ import org.bukkit.event.block.BlockListener;
 import org.bukkit.event.block.BlockPlaceEvent;
 
 import ssell.FortressAssault.FAGizmoHandler;
+import ssell.FortressAssault.FortressAssault.FAPlayer;
 
 //------------------------------------------------------------------------------------------
 
@@ -18,10 +19,7 @@ public class FABlockListener
 {
 	public static FortressAssault plugin;
 	public final FAGizmoHandler gizmoHandler;
-	
-	private boolean fortifyPhase = false;
-	private boolean assaultPhase = false;
-	
+		
 	public FABlockListener( FortressAssault instance, FAGizmoHandler gizmo )
 	{
 		plugin = instance;
@@ -32,21 +30,25 @@ public class FABlockListener
 	{
 		Block block = event.getBlock( );
 		Player player = event.getPlayer( );
+		FAPlayer thisPlayer = plugin.getFAPlayer(player);
+		if (thisPlayer == null) {
+			return;
+		}
 		
-		if( block.getType( ) == Material.SPONGE )
+		if( block.getType( ) == Material.OBSIDIAN)
 		{
-			if( assaultPhase )
+			if( plugin.phase == 2 )
 			{
 				if( gizmoHandler.isGizmo( block ) )
 				{
 					//The sponge that was right-clicked is a Gizmo
-					gizmoHandler.gizmoHit( player, block );
+					gizmoHandler.gizmoHit( thisPlayer, block );
 					
-					//Cant destroy the Gizmo 
+					//Can't destroy the Gizmo 
 					event.setCancelled( true );
 				}
 			}
-			else if( fortifyPhase )
+			else if( plugin.phase == 1 )
 			{
 				if( gizmoHandler.isGizmo( block ) )
 				{					
@@ -59,21 +61,20 @@ public class FABlockListener
 	
 	public void onBlockPlace( BlockPlaceEvent event )
 	{
-		if( event.getBlock( ).getType( ) == Material.SPONGE )
+		Player player = event.getPlayer();
+		FAPlayer thisPlayer = plugin.getFAPlayer(player);
+		if (thisPlayer == null) {
+			return;
+		}
+		if( event.getBlock( ).getType( ) == Material.OBSIDIAN )
 		{
-			if( fortifyPhase )
+			if( plugin.phase == 1 )
 			{
-				if( !gizmoHandler.addGizmo( event.getPlayer( ), event.getBlock( ) ) )
+				if( !gizmoHandler.addGizmo( thisPlayer, event.getBlock( ) ) )
 				{
 					event.getBlock( ).setType( Material.AIR );
 				}
 			}
 		}
-	}
-	
-	public void setPhase( boolean isFortify, boolean isAssault )
-	{
-		fortifyPhase = isFortify;
-		assaultPhase = isAssault;
-	}
+	}	
 }

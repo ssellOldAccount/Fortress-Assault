@@ -1,16 +1,15 @@
 package ssell.FortressAssault;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityListener;
 
 import ssell.FortressAssault.FortressAssault;
 import ssell.FortressAssault.FAPvPWatcher;
+import ssell.FortressAssault.FortressAssault.FAPlayer;
 
 //------------------------------------------------------------------------------------------
 
@@ -19,13 +18,7 @@ public class FAEntityListener
 {
 	private final FortressAssault plugin;
 	private final FAPvPWatcher pvpWatcher;
-	
-	boolean godEnabled = false;
-	boolean listenToKills = false;
-	
-	List< Player > playerList = new ArrayList< Player >( );
-	List< String > deadPlayers = new ArrayList< String >( );
-	
+		
 	//--------------------------------------------------------------------------------------
 	
 	public FAEntityListener( FortressAssault instance )
@@ -44,131 +37,104 @@ public class FAEntityListener
 	public void onEntityDamage( EntityDamageEvent event )
 	{
 		super.onEntityDamage(event);
-
-		if( godEnabled )
+		Entity entity = event.getEntity( );
+		if( entity instanceof Player )
 		{
-			Entity entity = event.getEntity( );
-			
-			if( entity instanceof Player )
-			{
-				Player player = ( Player )entity;
-				
-				for( int i = 0; i < playerList.size( ); i++ )
+			Player player = ( Player )entity;
+			FAPlayer thisPlayer = plugin.getFAPlayer(player);
+			if (thisPlayer == null) {
+				//not in the game so ignore
+				return;
+			} else {
+				if( plugin.phase == 1 )
 				{
-					if( playerList.get( i ) == player )
-					{
-						event.setCancelled( true );
+					//phase 1 so no damage to players.
+					event.setCancelled( true );
+					return;
+				}
+				else if( plugin.phase == 2 )
+				{
+					if( event instanceof EntityDamageByEntityEvent )
+					{				
+						EntityDamageByEntityEvent damageEvent = ( EntityDamageByEntityEvent  )event;
 						
-						break;
+						if( ( damageEvent.getDamager( ) instanceof Player ) &&
+							  damageEvent.getEntity( ) instanceof Player )
+						{					
+							//player damaged by player
+							Player victim = ( Player )damageEvent.getEntity( );
+							Player attacker = ( Player )damageEvent.getDamager( );
+							
+							
+							
+							int damage = event.getDamage();
+							int oldHealth = victim.getHealth( );
+							int newHealth = oldHealth - damage;
+							
+							if (thisPlayer.dead) {
+								//already dead
+								return;
+							}
+												
+							if( newHealth <= 0 )
+							{						
+								//health says they are dead but lets make sure.								
+								event.setDamage(999);
+								thisPlayer.dead = true;
+								//to stop loot from dropping
+								victim.getInventory( ).clear( );							
+								pvpWatcher.killEvent( attacker,  victim );
+							}				
+						} else if (damageEvent.getEntity( ) instanceof Player) {
+							//player damaged by mob
+							Player victim = ( Player )damageEvent.getEntity( );
+							int damage = event.getDamage();
+							int oldHealth = victim.getHealth( );
+							int newHealth = oldHealth - damage;
+							if (thisPlayer.dead) {
+								//already dead
+								return;
+							}
+							if( newHealth <= 0 )
+							{						
+								//health says they are dead but lets make sure.								
+								event.setDamage(999);
+								thisPlayer.dead = true;
+								//to stop loot from dropping
+								victim.getInventory( ).clear( );
+							}
+						}
+					} else {
+						//player damaged by something else, maybe lava?
+						int damage = event.getDamage();
+						int oldHealth = player.getHealth( );
+						int newHealth = oldHealth - damage;
+						if (thisPlayer.dead) {
+							//already dead
+							return;
+						}
+						if( newHealth <= 0 )
+						{						
+							//health says they are dead but lets make sure.								
+							event.setDamage(999);
+							thisPlayer.dead = true;
+							//to stop loot from dropping
+							player.getInventory( ).clear( );
+						}
 					}
 				}
 			}
-		}
-		else if( listenToKills )
-		{
-			if( event instanceof EntityDamageByEntityEvent )
-			{				
-				EntityDamageByEntityEvent damageEvent = ( EntityDamageByEntityEvent  )event;
-				
-				if( ( damageEvent.getDamager( ) instanceof Player ) &&
-					  damageEvent.getEntity( ) instanceof Player )
-				{					
-					Player victim = ( Player )damageEvent.getEntity( );
-					Player attacker = ( Player )damageEvent.getDamager( );
-					
-					int damage = event.getDamage( );
-					int oldHealth = victim.getHealth( );
-					int newHealth = oldHealth - damage;
-					
-					if( newHealth <= 0 )
-					{
-						if( onDeadList( victim.getDisplayName( ) ) == -1 )
-						{
-							deadPlayers.add( victim.getDisplayName( ) );
-							
-							victim.getInventory( ).clear( );
-							
-							pvpWatcher.killEvent( attacker,  victim );
-						}
-					}				
-				}
-			}
+		} else {
+			//not a player so we don't care
+			return;
 		}
 	}
-	
-	/**
-	 * Enables or disables whether players can be damaged.
-	 * 
-	 * @param enable
-	 */
-	public void setGod( boolean enable )
-	{
-		godEnabled = enable;
-	}
-	
-	public void pvpListen( boolean enable )
-	{
-		listenToKills = enable;
-	}
-	
-	/** 
-	 * Adds player to list. Player must be in list to not be damaged.
-	 * 
-	 * @param player
-	 * @return
-	 */
-	public boolean addToList( Player player )
-	{
-		for( int i = 0; i < playerList.size( ); i++ )
-		{
-			if( playerList.get( i ) == player )
-			{
-				return false;
-			}
+	public void onEntityDeath( EntityDeathEvent event ) {
+		Entity entity = event.getEntity();
+		FAPlayer thisPlayer = plugin.getFAPlayer(entity);
+		if (thisPlayer != null) {
+			//player died by some other cause lets mark them as dead
+			thisPlayer.dead = true;
 		}
-		
-		playerList.add( player );
-		pvpWatcher.add( player );
-		
-		return true;
-	}
-	
-	/**
-	 * Clears the list of all players.
-	 */
-	public void clearList( )
-	{
-		playerList.clear( );
-	}
-	
-	public boolean onList( Player player )
-	{
-		for( int i = 0; i < playerList.size( ); i++ )
-		{
-			if( playerList.get( i ) == player )
-			{
-				return true;
-			}
-		}
-		
-		return false;
-	}
-	
-	public int onDeadList( String name )
-	{
-		for( int i = 0; i < deadPlayers.size( ); i++ )
-		{
-			if( deadPlayers.get( i ).equalsIgnoreCase( name ) )
-			{
-				return i;
-			}
-		}
-		
-		return -1;
-	}
-	
-	public void removeFromDeadList( int location )
-	{
-		deadPlayers.remove( location );
 	}
 }
