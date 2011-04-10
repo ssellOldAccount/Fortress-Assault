@@ -4,6 +4,7 @@ package ssell.FortressAssault;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -12,6 +13,8 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.craftbukkit.CraftWorld;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
@@ -19,6 +22,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.PluginManager;
+
+import ssell.FortressAssault.Utils.InventoryStash;
 
 //import ssell.FortressAssault.FAPvPWatcher.FAPlayer;
 //import ssell.FortressAssault.FortressAssault.Team;
@@ -35,29 +40,33 @@ public class FortressAssault
 	extends JavaPlugin
 {
 	public enum Team { NONE, RED, BLUE, HUMAN, ZOMBIE }
-	public enum Class { NONE, SCOUT, DEMOMAN, ENGINEER }
+	public enum ClassType { NONE, SCOUT, DEMOMAN, ENGINEER, PYRO, SOLDIER, SPY, MEDIC, SNIPER, HEAVY }
 	public final class FAPlayer implements Comparable<Object>
 	{
 		public String name;
 		public Player player;
 		public Team team;
-		public Class classtype;
+		public ClassType classtype;
 		public int kills;
 		public int deaths;
 		public int destructions;
+		public int itemset;
 		public World world;
 		public boolean dead;
+		public boolean disconnected;
 
 		public FAPlayer( Player p_Player )
 		{
-			name = p_Player.getDisplayName( );
+			name = ChatColor.stripColor(p_Player.getDisplayName());
 			player = p_Player;
 			team = Team.NONE;
-			classtype = Class.NONE;
+			classtype = ClassType.NONE;
 			kills = 0;
 			deaths = 0;
 			destructions = 0;
+			itemset = 0;
 			world = p_Player.getWorld();
+			disconnected = false;
 			if (p_Player.getHealth() < 0 ) {
 				dead = true;
 			} else {
@@ -78,6 +87,7 @@ public class FortressAssault
 	private final FAGizmoHandler gizmoHandler = new FAGizmoHandler( this, 2 );
 	private final FABlockListener blockListener = new FABlockListener( this, gizmoHandler );
 	private final FAPvPWatcher pvpWatcher = new FAPvPWatcher( this );
+	private final FAClassAbilities classAbilities = new FAClassAbilities( this );
 	private final FAEntityListener entityListener = new FAEntityListener( this );
 	private final FAPlayerListener playerListener = new FAPlayerListener( this, entityListener );
 	
@@ -85,10 +95,9 @@ public class FortressAssault
 	private int timeLimit = 1;			//Default time limit to build
 	
 	public List< FAPlayer > playerList = new ArrayList< FAPlayer >( );
+	private HashMap<String, InventoryStash> inventories = new HashMap<String, InventoryStash>();
 	
-	public int phase = 0;
-	
-	private List< JavaPair< String, List< ItemStack > > > inventoryList = new ArrayList< JavaPair< String, List< ItemStack > > >( );
+	public int phase = 0;	
 	
 	//--------------------------------------------------------------------------------------
 
@@ -96,9 +105,16 @@ public class FortressAssault
 	{
 		return pvpWatcher;
 	}
+	public FAClassAbilities getAbilities( )
+	{
+		return classAbilities;
+	}
 	
 	public void onDisable( ) 
 	{
+		if (phase != 0) {
+			stopGame();
+		}
 		log.info( "Fortress Assault is disabled!" );
 	}
 
@@ -123,9 +139,13 @@ public class FortressAssault
 		pluginMgr.registerEvent( Event.Type.PLAYER_QUIT, playerListener,
 				 				 Event.Priority.Normal, this );
 		pluginMgr.registerEvent( Event.Type.PLAYER_JOIN, playerListener,
-				 Event.Priority.Normal, this );
+				 				 Event.Priority.Normal, this );
+		pluginMgr.registerEvent( Event.Type.PLAYER_DROP_ITEM, playerListener,
+				 				 Event.Priority.Normal, this );
+		pluginMgr.registerEvent( Event.Type.PLAYER_MOVE, playerListener,
+				 				 Event.Priority.Normal, this );
 		
-		log.info( "Fortress Assault v1.2.0 is enabled!" );
+		log.info( "Fortress Assault v1.2.2 is enabled!" );
 	}
 	
 	/**
@@ -162,7 +182,7 @@ public class FortressAssault
 				}
 				if( split.length == 0 )
 				{				
-					addPlayer( ( Player )sender, nextTeam, thePlayer.getDisplayName() );
+					addPlayer( ( Player )sender, nextTeam, ChatColor.stripColor(thePlayer.getDisplayName()) );
 				}
 				else if (split.length == 1)
 				{					
@@ -194,7 +214,14 @@ public class FortressAssault
 			else if( commandName.equalsIgnoreCase( "fareturn" ) )
 			{
 				if (phase == 0) {
-					returnInventory(( Player )sender);
+					Player player = ( Player )sender;
+					FAPlayer thisPlayer = getFAPlayer(player);
+					if (hasPlayerInventory(ChatColor.stripColor(thisPlayer.name))) {
+						player.sendMessage(ChatColor.GREEN + "Here is your inventory back.");						
+						restorePlayerInventory(thisPlayer);
+					} else {
+						player.sendMessage(ChatColor.RED + "You have no stored inventory to retrieve.");
+					}
 				}
 			}
 		}
@@ -224,10 +251,14 @@ public class FortressAssault
 		}								
 	}
 	public void showScoreAll() {
+		getServer( ).broadcastMessage( ChatColor.YELLOW + "# Name | Kills | Deaths | Destructions");
+		Collections.sort(playerList);
 		for (int x=0;x<playerList.size();x++) {
 			FAPlayer thisPlayer = playerList.get(x);
-			showScore(thisPlayer.player);
-		}
+			ChatColor color = getTeamColor(thisPlayer.team);
+			String sep = ChatColor.YELLOW + " | " + color;
+			getServer( ).broadcastMessage( color + thisPlayer.name + sep + Integer.toString(thisPlayer.kills)+ sep + Integer.toString(thisPlayer.deaths) + sep +Integer.toString(thisPlayer.destructions));					
+		}	
 	}
 	
 	/**
@@ -315,7 +346,7 @@ public class FortressAssault
 	 */
 	public void addPlayer( Player sender, String team, String toAdd )
 	{
-		Player tempPlayer = getServer( ).getPlayer( toAdd );
+		Player tempPlayer = getServer().getPlayer(ChatColor.stripColor(toAdd));
 		
 		//Valid player
 		if( tempPlayer != null )
@@ -383,7 +414,7 @@ public class FortressAssault
 		for (int x=0;x<playerList.size();x++) {
 			FAPlayer thisPlayer = playerList.get(x);
 			try {
-				if (thisPlayer.name.equalsIgnoreCase(player.getDisplayName())) {	
+				if (thisPlayer.name.equalsIgnoreCase(ChatColor.stripColor(player.getDisplayName()))) {	
 					if (thisPlayer.player.getEntityId() != player.getEntityId()) {				
 						//fix player reference in case they reconnected.
 						thisPlayer.player = player;					
@@ -422,11 +453,7 @@ public class FortressAssault
 				getServer( ).broadcastMessage( ChatColor.YELLOW + thisPlayer.name +	" has stopped the current game of Fortress Assault." );				
 				getServer( ).getScheduler( ).cancelTasks( this );
 				
-				phase = 0;
-				
-				gizmoHandler.clearList( );			
-				giveGameItems();
-				returnInventory();
+				stopGame();
 			}
 			else
 			{
@@ -438,6 +465,13 @@ public class FortressAssault
 		{
 			sender.sendMessage( ChatColor.DARK_RED + "No Fortress Assault game occuring." );
 		}
+	}
+	public void stopGame() {
+		phase = 0;
+		
+		gizmoHandler.clearList( );			
+		giveGameItems();
+		restorePlayerInventory();
 	}
 	
 	/**
@@ -560,36 +594,6 @@ public class FortressAssault
 	{
 		getServer( ).broadcastMessage( ChatColor.YELLOW + "" + timeLeft + " seconds remaining!" );
 	}	
-	@SuppressWarnings("deprecation")
-	public void storeInventory(FAPlayer thisPlayer) {
-		boolean storedAnItem = false;
-		Player player = thisPlayer.player;
-		player = getServer( ).getPlayer( player.getDisplayName( ) );
-		//make sure they don't already have stuff stored.
-		returnInventory(player);
-		//Stash inventories	
-		List< ItemStack > newList = new ArrayList< ItemStack >( );
-		
-		for( int j = 0; j < 36; j++ )
-		{
-			ItemStack thisStack = thisPlayer.player.getInventory( ).getItem( j );
-			if( thisStack != null )
-			{
-				//don't store air, game doesn't like that.
-				if (thisStack.getType() != Material.AIR) {
-					newList.add( thisPlayer.player.getInventory( ).getItem( j ) );
-					storedAnItem = true;
-				}
-			}
-		}
-		if (storedAnItem) {
-			player.sendMessage( ChatColor.YELLOW + "Storing your inventory. You will get it back after the event." );
-			inventoryList.add( new JavaPair< String, List< ItemStack > >( thisPlayer.name, newList ) );
-			player.getInventory( ).clear();
-			//DEPRECATED. need to find alternative
-			player.updateInventory( );
-		}
-	}
 	public void resetScoreboard() 
 	{
 		for (int i=0;i<playerList.size();i++) {
@@ -619,19 +623,35 @@ public class FortressAssault
 			return;
 		}
 		//make sure entity is correct
-		player = getServer( ).getPlayer( player.getDisplayName( ) );
+		player = getServer().getPlayer(ChatColor.stripColor(player.getDisplayName()));
 		FAPlayer thisPlayer = getFAPlayer(player);	
-		if (thisPlayer == null) {
+		if (thisPlayer == null || thisPlayer.dead || thisPlayer.disconnected || thisPlayer.itemset == phase) {
 			return;
 		}
 		switch (phase) {
 		//game not running
 		case 0:
 			player.getInventory( ).clear( );
+			player.getInventory( ).setHelmet(null);
+			player.getInventory( ).setChestplate(null);
+			player.getInventory( ).setLeggings(null);
+			player.getInventory( ).setBoots(null);
 			break;
 		//fortify phase
 		case 1:
 			player.getInventory( ).clear( );
+			
+			if (thisPlayer.team == Team.BLUE || thisPlayer.team == Team.ZOMBIE) {
+				player.getInventory( ).setHelmet( new ItemStack( Material.CHAINMAIL_HELMET, 1 ) );
+				player.getInventory( ).setChestplate( new ItemStack( Material.CHAINMAIL_CHESTPLATE, 1 ) );
+				player.getInventory( ).setLeggings( new ItemStack( Material.CHAINMAIL_LEGGINGS, 1 ) );
+				player.getInventory( ).setBoots( new ItemStack( Material.CHAINMAIL_BOOTS, 1 ) );
+			} else {
+				player.getInventory( ).setHelmet( new ItemStack( Material.GOLD_HELMET, 1 ) );
+				player.getInventory( ).setChestplate( new ItemStack( Material.GOLD_CHESTPLATE, 1 ) );
+				player.getInventory( ).setLeggings( new ItemStack( Material.GOLD_LEGGINGS, 1 ) );
+				player.getInventory( ).setBoots( new ItemStack( Material.GOLD_BOOTS, 1 ) );				
+			}
 		
 			player.getInventory( ).addItem( new ItemStack( Material.OBSIDIAN, 1 ) );
 			player.getInventory( ).addItem( new ItemStack( Material.IRON_PICKAXE, 1 ) );
@@ -667,6 +687,7 @@ public class FortressAssault
 			player.getInventory( ).addItem( new ItemStack( Material.BREAD, 1 ) );
 			break;
 		}
+		thisPlayer.itemset = phase;
 		//DEPRECATED. need to find alternative
 		player.updateInventory( );
 	}
@@ -682,7 +703,7 @@ public class FortressAssault
 		{
 			FAPlayer thisPlayer = playerList.get(i);			
 			if (thisPlayer != null) {
-				storeInventory(thisPlayer);
+				keepPlayerInventory(thisPlayer.player);
 				giveGameItems(thisPlayer.player);
 			}
 
@@ -731,11 +752,8 @@ public class FortressAssault
 	public void gameOver( )
 	{
 		getServer( ).getScheduler( ).cancelTasks( this );		
-		phase = 0;		
 		showScoreAll();
-		giveGameItems();
-		returnInventory();
-		gizmoHandler.clearList( );		
+		stopGame();	
 	}	
 		
 	/**
@@ -754,10 +772,7 @@ public class FortressAssault
 		
 		getServer( ).getScheduler( ).cancelTasks( this );
 		
-		phase = 0;
-		giveGameItems();
-		returnInventory();
-		gizmoHandler.clearList( );						
+		stopGame();					
 	}
 
 	public void cleanUpPlayerList()
@@ -771,64 +786,110 @@ public class FortressAssault
 		}
 	}
 	
-	/**
-	 * Returns the inventory to the specified player.<br>
-	 * If null is passed, then it returns all inventories.
-	 * 
-	 * @param player Specific player, or null for all.
-	 */
-	
-	public void returnInventory() 
+
+	public boolean hasPlayerInventory(String playerName) {
+		return inventories.containsKey(playerName);
+	}
+
+	public void keepPlayerInventory(Player player) {
+		//make sure entity is correct
+		player = getServer().getPlayer(ChatColor.stripColor(player.getDisplayName()));
+		FAPlayer thisPlayer = getFAPlayer(player);
+		if (thisPlayer.dead) {
+			//don't try to store anything if they are dead.
+			return;
+		}
+		if (hasPlayerInventory(ChatColor.stripColor(player.getDisplayName()))) {
+			restorePlayerInventory(thisPlayer);
+		}
+		PlayerInventory inventory = player.getInventory();
+		ItemStack[] contents = inventory.getContents();
+		inventories.put(player.getName(), new InventoryStash(contents, inventory.getHelmet(), inventory.getChestplate(), inventory.getLeggings(), inventory.getBoots()));	
+	}
+	public void restorePlayerInventory() 
 	{
 		for (int i=0;i<playerList.size();i++) {
-			returnInventory(playerList.get(i).player);
-		}
-	}
-	@SuppressWarnings("deprecation")
-	public void returnInventory( Player player )
-	{
-		if( player != null )
-		{
-			player = getServer( ).getPlayer( player.getDisplayName( ) );
-			for( int i = 0; i < inventoryList.size( ); i++ )
-			{
-				if( inventoryList.get( i ).first.equalsIgnoreCase( player.getDisplayName() ) )
-				{	
-					FAPlayer thisPlayer = getFAPlayer(player);
-					if (thisPlayer != null) {
-						if (thisPlayer.dead) {
-							player.sendMessage( ChatColor.YELLOW + "You were dead when game ended use /faReturn to get your inventory back when your alive." );
-							//player is dead so don't give them inventory now.
-							continue;
-						}
+			FAPlayer thisPlayer = playerList.get(i);
+			if (thisPlayer != null) {
+				if (hasPlayerInventory(thisPlayer.name)) {
+					if (thisPlayer.dead) {
+						thisPlayer.player.sendMessage(ChatColor.RED + "You were dead when game ended, please use /faReturn to get your inventory back.");
+					} else {
+						restorePlayerInventory(thisPlayer);
 					}
-					//Stashed inventory found.
-					List< ItemStack > oldInventory = inventoryList.get( i ).second;
-					
-					if( oldInventory != null )
-					{
-						PlayerInventory newInventory = player.getInventory( );
-						
-						newInventory.clear( );
-						
-						for( int j = 0; j < oldInventory.size( ); j++ )
-						{
-							ItemStack thisStack = oldInventory.get( j );
-							if (thisStack != null ) {
-								//give player itemstack
-								newInventory.addItem( thisStack );
-							}
-						}
-						
-						inventoryList.remove( i );
-						
-						//DEPRECATED. need to find alternative
-						player.updateInventory( );
-					}
-					
-					break;
 				}
 			}
 		}
+	}
+	public void restorePlayerInventory(FAPlayer thisPlayer) {
+		//make sure entity is correct
+		Player player = getServer().getPlayer(ChatColor.stripColor(thisPlayer.name));
+		if (player != null) {			
+			InventoryStash originalContents = inventories.remove(player.getName());
+			PlayerInventory playerInv = player.getInventory();
+			if(originalContents != null && playerInv != null) {
+				playerInvFromInventoryStash(playerInv, originalContents);
+			} else {
+				getServer( ).broadcastMessage( ChatColor.DARK_RED + "[FA] INV NULL");
+			}
+		} else {
+			if (thisPlayer != null) {
+				if (thisPlayer.disconnected) { 
+					thisPlayer.itemset = 0;
+					PlayerInventory playerInv = thisPlayer.player.getInventory();
+					InventoryStash originalContents = inventories.remove(thisPlayer.name);
+					playerInv.clear();
+					playerInv.setHelmet(null);
+					playerInv.setChestplate(null);
+					playerInv.setLeggings(null);
+					playerInv.setBoots(null);
+					playerInvFromInventoryStash(playerInv, originalContents);
+					//force save of offline player.				
+					CraftWorld cWorld = (CraftWorld)thisPlayer.world;
+					CraftPlayer cPlayer = (CraftPlayer)thisPlayer.player;
+					cWorld.getHandle().o().d().a(cPlayer.getHandle());
+				}
+			}
+		}
+	}
+	
+	private void playerInvFromInventoryStash(PlayerInventory playerInv,	InventoryStash originalContents) {
+		//playerInv.clear();
+		//playerInv.clear(playerInv.getSize() + 0);
+		//playerInv.clear(playerInv.getSize() + 1);
+		//playerInv.clear(playerInv.getSize() + 2);
+		//playerInv.clear(playerInv.getSize() + 3);	// helmet/blockHead
+		for(ItemStack item : originalContents.getContents()) {
+			try {
+				if(item != null) {
+					if (item.getType() != Material.AIR) {
+						if(item.getTypeId() != 0) {
+							playerInv.addItem(item);
+						}
+					}
+				}
+			} catch (NullPointerException e) {
+				//bad item
+				getServer( ).broadcastMessage( ChatColor.DARK_RED + "[FA] BAD ITEM CAN'T STORE");
+				continue;
+			}
+		}
+		if(originalContents.getHelmet() != null && originalContents.getHelmet().getType() != Material.AIR) {
+			playerInv.setHelmet(originalContents.getHelmet());
+		}
+		if(originalContents.getChest() != null && originalContents.getChest().getType() != Material.AIR) {
+			playerInv.setChestplate(originalContents.getChest());
+		}
+		if(originalContents.getLegs() != null && originalContents.getLegs().getType() != Material.AIR) {
+			playerInv.setLeggings(originalContents.getLegs());
+		}
+		if(originalContents.getFeet() != null && originalContents.getFeet().getType() != Material.AIR) {
+			playerInv.setBoots(originalContents.getFeet());
+		}
+	}
+
+	public InventoryStash getPlayerInventory(String playerName) {
+		if(inventories.containsKey(playerName)) return inventories.get(playerName);
+		return null;
 	}
 }

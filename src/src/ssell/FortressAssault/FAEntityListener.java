@@ -1,14 +1,17 @@
 package ssell.FortressAssault;
 
+import org.bukkit.Material;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityListener;
+import org.bukkit.inventory.ItemStack;
 
 import ssell.FortressAssault.FortressAssault;
 import ssell.FortressAssault.FAPvPWatcher;
+import ssell.FortressAssault.FortressAssault.ClassType;
 import ssell.FortressAssault.FortressAssault.FAPlayer;
 
 //------------------------------------------------------------------------------------------
@@ -53,73 +56,64 @@ public class FAEntityListener
 					return;
 				}
 				else if( plugin.phase == 2 )
-				{
+				{					
+					int damage = event.getDamage();
+					int oldHealth = player.getHealth( );
+					int newHealth = oldHealth - damage;
+					
+					if (thisPlayer.dead) {
+						//already dead
+						return;
+					}							
+										
+					if( newHealth <= 0 )
+					{						
+						//health says they are dead but lets make sure.								
+						event.setDamage(999);
+						thisPlayer.dead = true;
+						//to stop loot from dropping
+						player.getInventory( ).clear( );
+						player.getInventory( ).setHelmet(null);
+						player.getInventory( ).setChestplate(null);
+						player.getInventory( ).setLeggings(null);
+						player.getInventory( ).setBoots(null);
+						
+						//drop a cookie
+						player.getWorld().dropItem(player.getLocation(),new ItemStack( Material.COOKIE, 1 ));
+						
+					}
+
 					if( event instanceof EntityDamageByEntityEvent )
-					{				
+					{
 						EntityDamageByEntityEvent damageEvent = ( EntityDamageByEntityEvent  )event;
 						
 						if( ( damageEvent.getDamager( ) instanceof Player ) &&
 							  damageEvent.getEntity( ) instanceof Player )
 						{					
 							//player damaged by player
-							Player victim = ( Player )damageEvent.getEntity( );
 							Player attacker = ( Player )damageEvent.getDamager( );
-							
-							
-							
-							int damage = event.getDamage();
-							int oldHealth = victim.getHealth( );
-							int newHealth = oldHealth - damage;
-							
 							if (thisPlayer.dead) {
-								//already dead
-								return;
+								pvpWatcher.killEvent( attacker,  player );
 							}
-												
-							if( newHealth <= 0 )
-							{						
-								//health says they are dead but lets make sure.								
-								event.setDamage(999);
-								thisPlayer.dead = true;
-								//to stop loot from dropping
-								victim.getInventory( ).clear( );							
-								pvpWatcher.killEvent( attacker,  victim );
-							}				
+							
+				
 						} else if (damageEvent.getEntity( ) instanceof Player) {
 							//player damaged by mob
-							Player victim = ( Player )damageEvent.getEntity( );
-							int damage = event.getDamage();
-							int oldHealth = victim.getHealth( );
-							int newHealth = oldHealth - damage;
-							if (thisPlayer.dead) {
-								//already dead
-								return;
-							}
-							if( newHealth <= 0 )
-							{						
-								//health says they are dead but lets make sure.								
-								event.setDamage(999);
-								thisPlayer.dead = true;
-								//to stop loot from dropping
-								victim.getInventory( ).clear( );
-							}
 						}
 					} else {
 						//player damaged by something else, maybe lava?
-						int damage = event.getDamage();
-						int oldHealth = player.getHealth( );
-						int newHealth = oldHealth - damage;
-						if (thisPlayer.dead) {
-							//already dead
-							return;
-						}
-						if( newHealth <= 0 )
-						{						
-							//health says they are dead but lets make sure.								
-							event.setDamage(999);
-							thisPlayer.dead = true;
-							//to stop loot from dropping
-							player.getInventory( ).clear( );
+						//don't burn for so long.
+						String cause = event.getCause().toString();
+						if (cause.equals("FIRE") || cause.equals("FIRE_TICK")) {
+							if (thisPlayer.classtype == ClassType.PYRO) {									
+								player.setFireTicks(0);
+								event.setCancelled( true );								
+							} else {
+								int burningTime = player.getFireTicks();
+								if (burningTime>60) {
+									player.setFireTicks(60);
+								}
+							}
 						}
 					}
 				}

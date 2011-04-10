@@ -17,6 +17,15 @@ import ssell.FortressAssault.FortressAssault.FAPlayer;
 public class FABlockListener 
 	extends BlockListener
 {
+	public final class FASpecialBlock
+	{
+		public Block block;
+		public int power;
+		public FASpecialBlock( Block p_block )
+		{
+			block = p_block;
+		}
+	}
 	public static FortressAssault plugin;
 	public final FAGizmoHandler gizmoHandler;
 		

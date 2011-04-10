@@ -22,6 +22,7 @@ public class FAGizmoHandler
 		public Block block;
 		public FAPlayer destroyer;
 		public boolean destructing;
+		public int destructingtask;
 		
 		public FAGizmo( Team p_Team, Block p_Block )
 		{
@@ -123,7 +124,7 @@ public class FAGizmoHandler
 			{
 				gizmo.destroyer = null;
 				gizmo.destructing = false;
-				
+				plugin.getServer( ).getScheduler( ).cancelTask(gizmo.destructingtask);
 				plugin.getServer( ).broadcastMessage( plugin.getTeamColor(player.team) + player.name + " saved the "+player.team.toString()+" Gizmo!" );
 			}
 		}
@@ -140,7 +141,7 @@ public class FAGizmoHandler
 				final FAGizmo finalGizmo = gizmo;
 				
 				//Start counting
-				plugin.getServer( ).getScheduler( ).scheduleAsyncDelayedTask( plugin, 
+				gizmo.destructingtask = plugin.getServer( ).getScheduler( ).scheduleAsyncDelayedTask( plugin, 
 						new Runnable( )
 				{
 					public void run( )
@@ -167,7 +168,7 @@ public class FAGizmoHandler
 			FAPlayer thisPlayer = getDestroyer();
 			
 			plugin.getServer( ).broadcastMessage( plugin.getTeamColor(thisPlayer.team) + thisPlayer.team.toString()+" Team " +	ChatColor.GOLD + "wins!" );
-			
+			thisPlayer.destructions++;
 			//Game is over.
 			plugin.gameOver( );	
 		}
