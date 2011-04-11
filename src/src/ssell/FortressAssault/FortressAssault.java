@@ -6,11 +6,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.craftbukkit.CraftWorld;
@@ -21,9 +23,13 @@ import org.bukkit.event.Event;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 
+import com.nijikokun.bukkit.Permissions.Permissions;
+
 import ssell.FortressAssault.Utils.InventoryStash;
+import ssell.FortressAssault.Utils.Volume;
 
 //import ssell.FortressAssault.FAPvPWatcher.FAPlayer;
 //import ssell.FortressAssault.FortressAssault.Team;
@@ -36,9 +42,9 @@ import ssell.FortressAssault.Utils.InventoryStash;
  * 
  * @author Steven Sell
  */
-public class FortressAssault
-	extends JavaPlugin
+public class FortressAssault extends JavaPlugin
 {
+	public static Permissions Permissions = null;
 	public enum Team { NONE, RED, BLUE, HUMAN, ZOMBIE }
 	public enum ClassType { NONE, SCOUT, DEMOMAN, ENGINEER, PYRO, SOLDIER, SPY, MEDIC, SNIPER, HEAVY }
 	public final class FAPlayer implements Comparable<Object>
@@ -93,6 +99,8 @@ public class FortressAssault
 	
 	private int resources = 2;			//Default resource level (normal)
 	private int timeLimit = 1;			//Default time limit to build
+	private Volume volume;
+	private boolean mapsaved = false;
 	
 	public List< FAPlayer > playerList = new ArrayList< FAPlayer >( );
 	private HashMap<String, InventoryStash> inventories = new HashMap<String, InventoryStash>();
@@ -113,6 +121,9 @@ public class FortressAssault
 	public void onDisable( ) 
 	{
 		if (phase != 0) {
+			if (mapsaved) {
+				volume.resetBlocks();
+			}
 			stopGame();
 		}
 		log.info( "Fortress Assault is disabled!" );
@@ -123,6 +134,7 @@ public class FortressAssault
 	 */
 	public void onEnable( ) 
 	{
+		setupPermissions();
 		PluginManager pluginMgr = getServer( ).getPluginManager( );
 		
 		//Register for events
@@ -145,7 +157,7 @@ public class FortressAssault
 		pluginMgr.registerEvent( Event.Type.PLAYER_MOVE, playerListener,
 				 				 Event.Priority.Normal, this );
 		
-		log.info( "Fortress Assault v1.2.2 is enabled!" );
+		log.info( "Fortress Assault v1.2.3 is enabled!" );		
 	}
 	
 	/**
@@ -156,77 +168,170 @@ public class FortressAssault
 	{
 		String[] split = args;
 		String commandName = command.getName().toLowerCase();
-	        
-		if ( sender instanceof Player ) 
-		{
-			if( commandName.equalsIgnoreCase("fastart" ) )
+		Player player = ( Player )sender;
+	    if (canPlayFA(player) == false) {
+	    	player.sendMessage(ChatColor.RED + "You don't have permission to play Fortress Assault.");
+	    } else {
+			if ( sender instanceof Player ) 
 			{
-				startEvent( ( Player )sender );
-				
-				return true;
-			}
-			else if( commandName.equalsIgnoreCase( "fastop" ) )
-			{
-				stopEvent( ( Player )sender );
-				
-				return true;
-			}
-			else if( commandName.equalsIgnoreCase( "faadd" ) )
-			{
-				Player thePlayer = ( Player )sender;
-				int bluecount = getTeamCount(Team.BLUE);
-				int redcount = getTeamCount(Team.RED);
-				String nextTeam = "RED";
-				if (redcount>bluecount) {
-					nextTeam = "BLUE";
-				}
-				if( split.length == 0 )
-				{				
-					addPlayer( ( Player )sender, nextTeam, ChatColor.stripColor(thePlayer.getDisplayName()) );
-				}
-				else if (split.length == 1)
-				{					
-					addPlayer( ( Player )sender, nextTeam, split[ 0 ] );
-				}
-				else if (split.length == 2)
+				if( commandName.equalsIgnoreCase("fastart" ) )
 				{
-					addPlayer( ( Player )sender, split[ 0 ], split[ 1 ] );
-				}
-				
-				return true;
-			}
-			else if( commandName.equalsIgnoreCase( "faresource" ) )
-			{
-				setResources( ( Player )sender, split[ 0 ] );
-				
-				return true;
-			}
-			else if( commandName.equalsIgnoreCase( "fatime" ) )
-			{
-				setTime( ( Player )sender, split[ 0 ] );
-				
-				return true;
-			}
-			else if( commandName.equalsIgnoreCase( "fateams" ) )
-			{
-				showScore(( Player )sender);
-			}
-			else if( commandName.equalsIgnoreCase( "fareturn" ) )
-			{
-				if (phase == 0) {
-					Player player = ( Player )sender;
-					FAPlayer thisPlayer = getFAPlayer(player);
-					if (hasPlayerInventory(ChatColor.stripColor(thisPlayer.name))) {
-						player.sendMessage(ChatColor.GREEN + "Here is your inventory back.");						
-						restorePlayerInventory(thisPlayer);
+					if (canStart(player)) {
+						startEvent( ( Player )sender );
 					} else {
-						player.sendMessage(ChatColor.RED + "You have no stored inventory to retrieve.");
+						player.sendMessage(ChatColor.RED + "You don't have permission to start the game.");
 					}
+					
+					return true;
+				}
+				else if( commandName.equalsIgnoreCase( "fastop" ) )
+				{
+					if (canStop(player)) {
+						stopEvent( ( Player )sender );
+					} else {
+						player.sendMessage(ChatColor.RED + "You don't have permission to stop the game.");
+					}
+					
+					return true;
+				}
+				else if( commandName.equalsIgnoreCase( "faadd" ) )
+				{
+					int bluecount = getTeamCount(Team.BLUE);
+					int redcount = getTeamCount(Team.RED);
+					String nextTeam = "RED";
+					if (redcount>bluecount) {
+						nextTeam = "BLUE";
+					}
+					if( split.length == 0 )
+					{				
+						addPlayer( ( Player )sender, nextTeam, ChatColor.stripColor(player.getDisplayName()) );
+					}
+					else if (split.length == 1)
+					{					
+						addPlayer( ( Player )sender, nextTeam, split[ 0 ] );
+					}
+					else if (split.length == 2)
+					{
+						addPlayer( ( Player )sender, split[ 0 ], split[ 1 ] );
+					}
+					
+					return true;
+				}
+				else if( commandName.equalsIgnoreCase( "faresource" ) )
+				{
+					setResources( ( Player )sender, split[ 0 ] );
+					
+					return true;
+				}
+				else if( commandName.equalsIgnoreCase( "fatime" ) )
+				{
+					setTime( ( Player )sender, split[ 0 ] );
+					
+					return true;
+				}
+				else if( commandName.equalsIgnoreCase( "fateams" ) )
+				{
+					showScore(player);
+				}
+				else if( commandName.equalsIgnoreCase( "fareturn" ) )
+				{
+					if (phase == 0) {
+						FAPlayer thisPlayer = getFAPlayer(player);
+						if (hasPlayerInventory(ChatColor.stripColor(thisPlayer.name))) {
+							player.sendMessage(ChatColor.GREEN + "Here is your inventory back.");						
+							restorePlayerInventory(thisPlayer);
+						} else {
+							player.sendMessage(ChatColor.RED + "You have no stored inventory to retrieve.");
+						}
+					}
+				}
+				else if( commandName.equalsIgnoreCase( "fasave" ) )
+				{
+					if (canSaveMap(player)) {
+						if (phase == 0) {
+							Block playerBlock = player.getLocation().getBlock();
+							Block one = player.getWorld().getBlockAt(playerBlock.getX()+50, playerBlock.getY()+20, playerBlock.getZ()+50);
+							Block two = player.getWorld().getBlockAt(playerBlock.getX()-50, playerBlock.getY()-20, playerBlock.getZ()-50);
+							volume = new Volume("arena",this,player.getWorld());
+							volume.setCornerOne(one);
+							volume.setCornerTwo(two);
+							volume.saveBlocks();
+							mapsaved = true;
+							player.sendMessage(ChatColor.GREEN + "Map saved 50 blocks around you. only 20 up/down");
+						} else {
+							player.sendMessage(ChatColor.RED + "Game must be stopped to save.");
+						}
+					} else {
+						player.sendMessage(ChatColor.RED + "You don't have permission to save the map.");
+					}
+				}
+				else if( commandName.equalsIgnoreCase( "fareset" ) )
+				{
+					if (canReset(player)) {
+						if (phase == 0) {
+							if (mapsaved) {
+								volume.resetBlocks();
+								player.sendMessage(ChatColor.GREEN + "Map reset.");
+							} else {
+								player.sendMessage(ChatColor.RED + "Nothing saved to reset.");
+							}
+						} else {
+							player.sendMessage(ChatColor.RED + "You can't reset till the game is over.");
+						}
+					} else {
+						player.sendMessage(ChatColor.RED + "You don't have permission to reset the map.");
+					}
+									
+				}
+				else if( commandName.equalsIgnoreCase( "faclass" ) )
+				{							
+					if (canChangeClass(player)) {
+						if (split.length == 1) {
+							FAPlayer thisPlayer = getFAPlayer(player);
+							if (thisPlayer != null) {
+								try {
+									ClassType thisclass = ClassType.valueOf(args[0].toUpperCase());
+									thisPlayer.classtype = thisclass;
+									player.sendMessage(ChatColor.GREEN + "Class changed.");
+								} catch(IllegalArgumentException e) {
+									getServer( ).broadcastMessage( ChatColor.DARK_RED+"That is not a valid class!");
+								}
+							} else {
+								player.sendMessage(ChatColor.RED + "You are not added to the game.");
+							}
+						} else {
+							player.sendMessage(ChatColor.RED + "You need to specify a class ie: SCOUT, PYRO.");
+						}
+					} else {
+						player.sendMessage(ChatColor.RED + "You don't have permission to change classes.");
+					}
+									
+				}
+	
+				
+			}
+	    }
+		return false;
+	}
+	public Player getPlayer(String playerName) {
+		String cleanName = ChatColor.stripColor(playerName);
+		Player thisPlayer = getServer().getPlayer(cleanName);		
+        String pattern = "[^a-zA-Z0-9]";
+		if (thisPlayer == null) {
+			getServer( ).broadcastMessage( ChatColor.GREEN + "Trying HARD match for:"+cleanName);
+			//still not found lets try striping stupid titles and do match
+			cleanName = cleanName.replaceAll(pattern, "");
+			for (int i=0;i<cleanName.length();i++) {
+				cleanName = cleanName.substring(i,cleanName.length());
+				getServer( ).broadcastMessage( ChatColor.GREEN + "Trying match for:"+cleanName);
+				thisPlayer = getServer().getPlayer(cleanName);
+				if (thisPlayer != null) {
+					getServer( ).broadcastMessage( ChatColor.GREEN + "Match found:");
+					return thisPlayer;
 				}
 			}
 		}
-		
-		return false;
+		return thisPlayer;
 	}
 	public int getTeamCount(Team theTeam) {
 		int count = 0;
@@ -891,5 +996,99 @@ public class FortressAssault
 	public InventoryStash getPlayerInventory(String playerName) {
 		if(inventories.containsKey(playerName)) return inventories.get(playerName);
 		return null;
+	}
+	public void logWarn(String message) {
+		log.log(Level.WARNING, message);
+	}
+	@SuppressWarnings("static-access")
+	public void setupPermissions() {
+		Plugin test = this.getServer().getPluginManager().getPlugin("Permissions");
+
+		if(this.Permissions == null) {
+		    if(test != null) {
+		    	this.Permissions = (Permissions)test;
+		    } else {
+		    	logWarn("Fortress Assault Permissions system not enabled. Using default.");
+		    }
+		}
+	}
+	@SuppressWarnings("static-access")
+	public boolean canPlayFA(Player player) {
+		if(Permissions != null 
+				&& (Permissions.Security.permission(player, "fa.player")
+						|| Permissions.Security.permission(player, "FA.player"))) {
+			return true;
+		}
+		if(Permissions == null) {
+			// w/o Permissions, everyone can play
+			return true;
+		}
+		return false;
+	}
+	@SuppressWarnings("static-access")
+	public boolean canSaveMap(Player player) {
+		if(Permissions != null 
+				&& (Permissions.Security.permission(player, "fa.save")
+						|| Permissions.Security.permission(player, "FA.save"))) {
+			return true;
+		}
+		if(Permissions == null) {
+			if (player.isOp()) {
+				return true;
+			}
+			return false;
+		}
+		return false;
+	}
+	@SuppressWarnings("static-access")
+	public boolean canReset(Player player) {
+		if(Permissions != null 
+				&& (Permissions.Security.permission(player, "fa.reset")
+						|| Permissions.Security.permission(player, "FA.reset"))) {
+			return true;
+		}
+		if(Permissions == null) {
+			return true;
+		}
+		return false;
+	}	
+	@SuppressWarnings("static-access")
+	public boolean canStart(Player player) {
+		if(Permissions != null 
+				&& (Permissions.Security.permission(player, "fa.start")
+						|| Permissions.Security.permission(player, "FA.start"))) {
+			return true;
+		}
+		if(Permissions == null) {
+			return true;
+		}
+		return false;
+	}
+	@SuppressWarnings("static-access")
+	public boolean canStop(Player player) {
+		if(Permissions != null 
+				&& (Permissions.Security.permission(player, "fa.stop")
+						|| Permissions.Security.permission(player, "FA.stop"))) {
+			return true;
+		}
+		if(Permissions == null) {
+			return true;
+		}
+		return false;
+	}
+	@SuppressWarnings("static-access")
+	public boolean canChangeClass(Player player) {
+		if(Permissions != null 
+				&& (Permissions.Security.permission(player, "fa.class")
+						|| Permissions.Security.permission(player, "FA.class"))) {
+			return true;
+		}
+		if(Permissions == null) {
+			if (player.isOp()) {
+				return true;
+			}
+			return false;
+		}
+		return false;
 	}
 }

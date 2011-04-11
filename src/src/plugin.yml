@@ -1,6 +1,6 @@
 name: FortressAssault
 main: ssell.FortressAssault.FortressAssault
-version: "1.2.2"
+version: "1.2.3"
 commands:
     faStart:
         description: Starts the event.
@@ -26,3 +26,12 @@ commands:
     faReturn:
         description: Returns a players inventory if they were dead when game ended.
         usage: /<command>     
+    faClass:
+        description: Changes the players class. PYRO or SCOUT.
+        usage: /<command>      
+    faSave:
+        description: Saves the map 50 blocks around the player and 20 blocks above and below.
+        usage: /<command>
+    faReset:
+        description: Restores the map to the saved state.
+        usage: /<command>        
